@@ -15,6 +15,9 @@ RUN apt-get update -qq && \
     apt-get install -qq -y git wget curl unzip && \
     rm -rf /var/lib/apt/lists/*
 
+# Install streamrip and orpheus
+RUN pip install streamrip==2.1.0 orpheus
+
 # Download and install rclone
 RUN ARCH=$(uname -m) && \
     if [ "$ARCH" = "x86_64" ]; then ARCH="amd64"; \
@@ -28,6 +31,8 @@ RUN ARCH=$(uname -m) && \
 FROM base AS final
 
 COPY --from=builder /usr/bin/rclone /usr/bin/rclone
+COPY --from=builder /usr/local/bin/rip /usr/local/bin/rip
+COPY --from=builder /usr/local/bin/orpheus /usr/local/bin/orpheus
 
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt

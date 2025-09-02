@@ -15,23 +15,10 @@ from ..helpers.message import edit_message, check_user
 @Client.on_callback_query(filters.regex(pattern=r"^providerPanel"))
 async def provider_cb(c, cb: CallbackQuery):
     if await check_user(cb.from_user.id, restricted=True):
-        buttons = []
-        # Always show Apple Music button
-        buttons.append([
-            InlineKeyboardButton("🍎 Apple Music", callback_data="appleP")
-        ])
-        
-        # Apple-only build: hide other providers
-            
-        buttons += [
-            [InlineKeyboardButton(lang.s.MAIN_MENU_BUTTON, callback_data="main_menu")],
-            [InlineKeyboardButton(lang.s.CLOSE_BUTTON, callback_data="close")]
-        ]
-        
         await edit_message(
             cb.message,
             lang.s.PROVIDERS_PANEL,
-            InlineKeyboardMarkup(buttons)
+            providers_button()
         )
 
 
@@ -155,3 +142,133 @@ async def apple_wrapper_setup_cb(c: Client, cb: CallbackQuery):
 
 
 # Apple-only build: remove Qobuz/Tidal handlers
+
+#----------------
+# QOBUZ
+#----------------
+@Client.on_callback_query(filters.regex(pattern=r"^qobuzP"))
+async def qobuz_cb(c, cb: CallbackQuery):
+    if await check_user(cb.from_user.id, restricted=True):
+        qualities = {
+            5: f"MP3 320 {'✅' if bot_set.qobuz.quality == 5 else ''}",
+            6: f"FLAC 16-bit {'✅' if bot_set.qobuz.quality == 6 else ''}",
+            7: f"FLAC 24-bit/<=96kHz {'✅' if bot_set.qobuz.quality == 7 else ''}",
+            27: f"FLAC 24-bit/>96kHz {'✅' if bot_set.qobuz.quality == 27 else ''}"
+        }
+        await edit_message(
+            cb.message,
+            lang.s.QOBUZ_QUALITY_PANEL,
+            qb_button(qualities)
+        )
+
+@Client.on_callback_query(filters.regex(pattern=r"^qbQ_"))
+async def qobuz_quality_cb(c, cb: CallbackQuery):
+    if await check_user(cb.from_user.id, restricted=True):
+        quality_map = {
+            "MP3 320": 5,
+            "FLAC 16-bit": 6,
+            "FLAC 24-bit/<=96kHz": 7,
+            "FLAC 24-bit/>96kHz": 27
+        }
+        quality_str = cb.data.split('_')[1]
+        quality_int = quality_map.get(quality_str)
+
+        bot_set.qobuz.quality = quality_int
+        set_db.set_variable('QOBUZ_QUALITY', quality_int)
+        await qobuz_cb(c, cb)
+
+#----------------
+# DEEZER
+#----------------
+@Client.on_callback_query(filters.regex(pattern=r"^deezerP"))
+async def deezer_cb(c, cb: CallbackQuery):
+    if await check_user(cb.from_user.id, restricted=True):
+         await edit_message(
+            cb.message,
+            "Deezer settings are configured via environment variables (DEEZER_ARL). No in-bot settings are available.",
+            InlineKeyboardMarkup(main_button + close_button)
+        )
+
+#----------------
+# TIDAL
+#----------------
+@Client.on_callback_query(filters.regex(pattern=r"^tidalP"))
+async def tidal_cb(c, cb: CallbackQuery):
+    if await check_user(cb.from_user.id, restricted=True):
+        await edit_message(
+            cb.message,
+            lang.s.TIDAL_PANEL,
+            tidal_buttons()
+        )
+
+@Client.on_callback_query(filters.regex(pattern=r"^tidalQuality"))
+async def tidal_quality_cb(c, cb: CallbackQuery):
+    if await check_user(cb.from_user.id, restricted=True):
+        qualities = {
+            'LOW': f"LOW {'✅' if bot_set.tidal.quality == 'LOW' else ''}",
+            'HIGH': f"HIGH {'✅' if bot_set.tidal.quality == 'HIGH' else ''}",
+            'LOSSLESS': f"LOSSLESS {'✅' if bot_set.tidal.quality == 'LOSSLESS' else ''}",
+            'HI_RES': f"HI_RES {'✅' if bot_set.tidal.quality == 'HI_RES' else ''}"
+        }
+        await edit_message(
+            cb.message,
+            "Select Tidal Quality",
+            tidal_quality_button(qualities)
+        )
+
+@Client.on_callback_query(filters.regex(pattern=r"^tidalQ_"))
+async def tidal_set_quality_cb(c, cb: CallbackQuery):
+    if await check_user(cb.from_user.id, restricted=True):
+        quality = cb.data.split('_')[1]
+        bot_set.tidal.quality = quality
+        set_db.set_variable('TIDAL_QUALITY', quality)
+        await tidal_quality_cb(c, cb)
+
+@Client.on_callback_query(filters.regex(pattern=r"^tidalAuth"))
+async def tidal_auth_cb(c, cb: CallbackQuery):
+    if await check_user(cb.from_user.id, restricted=True):
+        await edit_message(
+            cb.message,
+            lang.s.TIDAL_AUTH_PANEL.format(
+                'Yes' if bot_set.tidal.check_login() else 'No',
+                'Yes' if Config.TIDAL_MOBILE_TOKEN else 'No',
+                'Yes' if Config.TIDAL_ATMOS_MOBILE_TOKEN else 'No',
+                'Yes' if Config.TIDAL_TV_TOKEN else 'No'
+            ),
+            tidal_auth_buttons()
+        )
+
+@Client.on_callback_query(filters.regex(pattern=r"^tidalLogin"))
+async def tidal_login_cb(c, cb: CallbackQuery):
+    if await check_user(cb.from_user.id, restricted=True):
+        if not Config.TIDAL_TV_TOKEN:
+            await c.answer_callback_query(cb.id, lang.s.WARNING_NO_TIDAL_TOKEN, show_alert=True)
+            return
+
+        login_url, _ = await bot_set.tidal.login_get_url()
+        await edit_message(cb.message, lang.s.TIDAL_AUTH_URL.format(login_url), None)
+        # Placeholder for checking login status
+        # In a real scenario, you'd poll or have the user confirm.
+        await asyncio.sleep(10) # Simulate waiting time
+        if await bot_set.tidal.login_check_url():
+            await bot_set.save_tidal_login(bot_set.tidal.get_session())
+            await c.answer_callback_query(cb.id, lang.s.TIDAL_AUTH_SUCCESSFULL, show_alert=True)
+        else:
+            await c.answer_callback_query(cb.id, lang.s.ERR_LOGIN_TIDAL_TV_FAILED.format("Timeout"), show_alert=True)
+        await tidal_auth_cb(c, cb)
+
+
+@Client.on_callback_query(filters.regex(pattern=r"^tidalRemove"))
+async def tidal_remove_cb(c, cb: CallbackQuery):
+    if await check_user(cb.from_user.id, restricted=True):
+        if os.path.exists("./tidal_session.json"):
+            os.remove("./tidal_session.json")
+        await c.answer_callback_query(cb.id, lang.s.TIDAL_REMOVED_SESSION, show_alert=True)
+        await tidal_auth_cb(c, cb)
+
+@Client.on_callback_query(filters.regex(pattern=r"^tidalRefresh"))
+async def tidal_refresh_cb(c, cb: CallbackQuery):
+    if await check_user(cb.from_user.id, restricted=True):
+        await bot_set.login_tidal()
+        await c.answer_callback_query(cb.id, "Tidal session refreshed.", show_alert=True)
+        await tidal_auth_cb(c, cb)

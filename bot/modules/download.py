@@ -9,6 +9,9 @@ import bot.helpers.translations as lang
 
 from ..helpers.utils import cleanup
 from ..providers.apple import start_apple
+from ..providers.deezer import start_deezer
+from ..providers.qobuz import start_qobuz
+from ..providers.tidal import start_tidal
 # IMPORT EDIT_MESSAGE HERE:
 from ..helpers.message import send_message, antiSpam, check_user, fetch_user_details, edit_message
 
@@ -130,11 +133,26 @@ async def start_link(link: str, user: dict, options: dict = None):
         options: Command-line options passed by user
     """
     apple_music = ["https://music.apple.com"]
+    deezer = ["https://deezer.com", "https://www.deezer.com"]
+    qobuz = ["https://qobuz.com", "https://www.qobuz.com"]
+    tidal = ["https://tidal.com", "https://www.tidal.com"]
 
     if link.startswith(tuple(apple_music)):
         user['provider'] = 'Apple'
         await edit_message(user['bot_msg'], "Starting Apple Music download...")
         await start_apple(link, user, options)
+    elif link.startswith(tuple(deezer)):
+        user['provider'] = 'Deezer'
+        await edit_message(user['bot_msg'], "Starting Deezer download...")
+        await start_deezer(link, user, options)
+    elif link.startswith(tuple(qobuz)):
+        user['provider'] = 'Qobuz'
+        await edit_message(user['bot_msg'], "Starting Qobuz download...")
+        await start_qobuz(link, user, options)
+    elif link.startswith(tuple(tidal)):
+        user['provider'] = 'Tidal'
+        await edit_message(user['bot_msg'], "Starting Tidal download...")
+        await start_tidal(link, user, options)
     else:
         await send_message(user, lang.s.ERR_UNSUPPORTED_LINK)
         return None

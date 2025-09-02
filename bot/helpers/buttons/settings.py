@@ -49,8 +49,110 @@ def providers_button():
         InlineKeyboardButton("🍎 Apple Music", callback_data="appleP")
     ])
 
-    # Apple-only build: hide other providers
+    if bot_set.qobuz:
+        inline_keyboard.append(
+            [
+                InlineKeyboardButton(
+                    text=lang.s.QOBUZ,
+                    callback_data="qobuzP"
+                )
+            ]
+        )
+    if bot_set.deezer:
+        inline_keyboard.append(
+            [
+                InlineKeyboardButton(
+                    text=lang.s.DEEZER,
+                    callback_data="deezerP"
+                )
+            ]
+        )
+    if bot_set.tidal:
+        inline_keyboard.append(
+            [
+                InlineKeyboardButton(
+                    text=lang.s.TIDAL,
+                    callback_data="tidalP"
+                )
+            ]
+        )
 
+    inline_keyboard += main_button + close_button
+    return InlineKeyboardMarkup(inline_keyboard)
+
+
+# Apple-only build: remove tidal panels
+def tidal_buttons():
+    inline_keyboard = [
+        [
+            InlineKeyboardButton(
+                text=lang.s.AUTHORIZATION,
+                callback_data='tidalAuth'
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                text=lang.s.QUALITY,
+                callback_data='tidalQuality'
+            )
+        ]
+    ]
+    inline_keyboard += main_button + close_button
+    return InlineKeyboardMarkup(inline_keyboard)
+
+
+def tidal_auth_buttons():
+    inline_keyboard = [
+        [
+            InlineKeyboardButton(
+                text=lang.s.TIDAL_LOGIN_TV,
+                callback_data='tidalLogin'
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                text=lang.s.TIDAL_REFRESH_SESSION,
+                callback_data='tidalRefresh'
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                text=lang.s.TIDAL_REMOVE_LOGIN,
+                callback_data='tidalRemove'
+            )
+        ]
+    ]
+    inline_keyboard += main_button + close_button
+    return InlineKeyboardMarkup(inline_keyboard)
+
+
+# Qobuz qualities
+def qb_button(qualities:dict):
+    inline_keyboard = []
+    for quality in qualities.values():
+        inline_keyboard.append(
+            [
+                InlineKeyboardButton(
+                    text=quality,
+                    callback_data=f"qbQ_{quality.replace('✅', '')}"
+                )
+            ]
+        )
+    inline_keyboard += main_button + close_button
+    return InlineKeyboardMarkup(inline_keyboard)
+
+
+def tidal_quality_button(qualities:dict):
+    inline_keyboard = []
+    for quality in qualities.values():
+        inline_keyboard.append(
+            [
+                InlineKeyboardButton(
+                    text=quality,
+                    callback_data=f"tidalQ_{quality.replace('✅', '')}"
+                )
+            ]
+        )
     inline_keyboard += main_button + close_button
     return InlineKeyboardMarkup(inline_keyboard)
 
