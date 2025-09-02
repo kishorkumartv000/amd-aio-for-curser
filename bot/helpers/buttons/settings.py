@@ -101,14 +101,28 @@ def tidal_buttons():
     return InlineKeyboardMarkup(inline_keyboard)
 
 
-def tidal_auth_buttons():
-    inline_keyboard = [
-        [
-            InlineKeyboardButton(
-                text=lang.s.TIDAL_LOGIN_TV,
-                callback_data='tidalLogin'
-            )
-        ],
+def tidal_auth_buttons(confirm_login=False):
+    inline_keyboard = []
+    if confirm_login:
+        inline_keyboard.append(
+            [
+                InlineKeyboardButton(
+                    text="✅ Confirm Login",
+                    callback_data='tidalConfirmLogin'
+                )
+            ]
+        )
+    else:
+        inline_keyboard.append(
+            [
+                InlineKeyboardButton(
+                    text=lang.s.TIDAL_LOGIN_TV,
+                    callback_data='tidalLogin'
+                )
+            ]
+        )
+
+    inline_keyboard.extend([
         [
             InlineKeyboardButton(
                 text=lang.s.TIDAL_REFRESH_SESSION,
@@ -121,7 +135,8 @@ def tidal_auth_buttons():
                 callback_data='tidalRemove'
             )
         ]
-    ]
+    ])
+
     inline_keyboard += main_button + close_button
     return InlineKeyboardMarkup(inline_keyboard)
 

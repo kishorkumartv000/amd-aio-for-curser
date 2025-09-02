@@ -40,24 +40,18 @@ def __decrypt_string__(string):
     except:
         return string
 
-import streamrip
-from orpheus.orpheus import Orpheus
-
 class BotSettings:
     def __init__(self):
-        # Apple-only build: remove other providers
-        self.deezer = Orpheus() if Config.DEEZER_ARL else False
-        self.qobuz = streamrip.Qobuz() if Config.QOBUZ_TOKEN or (Config.QOBUZ_EMAIL and Config.QOBUZ_PASSWORD) else False
-        self.tidal = streamrip.Tidal() if Config.ENABLE_TIDAL and Config.ENABLE_TIDAL.lower() == 'true' else False
+        # Determine if providers are enabled based on credentials in config
+        self.deezer = bool(Config.DEEZER_ARL)
+        self.qobuz = bool(Config.QOBUZ_TOKEN or (Config.QOBUZ_EMAIL and Config.QOBUZ_PASSWORD))
+        self.tidal = _to_bool(Config.ENABLE_TIDAL)
+
         self.admins = Config.ADMINS
         self.apple = None  # Apple Music settings placeholder
         self.bot_username = (Config.BOT_USERNAME or "").lstrip("@")
 
         self.set_language()
-
-        # Login to providers
-        asyncio.get_event_loop().run_until_complete(self.login_qobuz())
-        asyncio.get_event_loop().run_until_complete(self.login_tidal())
 
         db_users, _ = set_db.get_variable('AUTH_USERS')
         self.auth_users = json.loads(db_users) if db_users else []
@@ -178,50 +172,6 @@ class BotSettings:
                 LOGGER.info("Apple Music downloader installed successfully")
             except Exception as e:
                 LOGGER.error(f"Apple Music downloader installation failed: {str(e)}")
-
-    async def login_qobuz(self):
-        if self.qobuz:
-            try:
-                if Config.QOBUZ_TOKEN:
-                    await self.qobuz.login_with_token(Config.QOBUZ_TOKEN)
-                elif Config.QOBUZ_EMAIL and Config.QOBUZ_PASSWORD:
-                    await self.qobuz.login(Config.QOBUZ_EMAIL, Config.QOBUZ_PASSWORD)
-                LOGGER.info("Qobuz login successful.")
-            except Exception as e:
-                LOGGER.error(f"Qobuz login failed: {e}")
-                self.qobuz = False
-
-    async def login_tidal(self):
-        if self.tidal:
-            try:
-                tidal_session_path = "./tidal_session.json"
-                if os.path.exists(tidal_session_path):
-                    self.tidal.load_session(tidal_session_path)
-                elif Config.TIDAL_TV_TOKEN:
-                     self.tidal.login_with_token(Config.TIDAL_TV_TOKEN)
-                     self.tidal.save_session(tidal_session_path)
-                LOGGER.info("Tidal login successful.")
-            except Exception as e:
-                LOGGER.error(f"Tidal login failed: {e}")
-                self.tidal = False
-
-    async def login_deezer(self):
-        if self.deezer:
-            try:
-                self.deezer.login_via_arl(Config.DEEZER_ARL)
-                LOGGER.info("Deezer login successful.")
-            except Exception as e:
-                LOGGER.error(f"Deezer login failed: {e}")
-                self.deezer = False
-
-    async def save_tidal_login(self, session):
-        if self.tidal and session:
-            try:
-                self.tidal.load_session_from_dict(session)
-                self.tidal.save_session("./tidal_session.json")
-                LOGGER.info("Tidal session saved successfully.")
-            except Exception as e:
-                LOGGER.error(f"Failed to save Tidal session: {e}")
 
     def set_language(self):
         """Set bot language"""

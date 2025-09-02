@@ -46,24 +46,19 @@ class DeezerProvider:
         user['progress'] = reporter
         await reporter.set_stage("Preparing")
 
-        # Construct the orpheus-dl command
         cmd = [
-            "orpheus",
+            "python3", "/opt/orpheusdl/orpheus.py",
             "-a", self.arl,
             "-o", user_dir,
-            "-q", "flac", # Default to FLAC, can be configured later
+            "-q", "6", # Corresponds to FLAC in orpheus
             url
         ]
 
         LOGGER.info(f"Running Orpheus-DL: {' '.join(cmd)}")
-
         process = await asyncio.create_subprocess_exec(
-            *cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE
+            *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
         )
 
-        # Register for cancellation
         try:
             if user.get('task_id'):
                 from bot.helpers.tasks import task_manager
@@ -79,21 +74,46 @@ class DeezerProvider:
             LOGGER.error(f"Orpheus-DL failed: {error}")
             return {'success': False, 'error': error}
 
-        # Since orpheus-dl doesn't have a library mode for metadata,
-        # we will need to scan the directory and extract metadata manually.
-        # This part will be implemented in a future step. For now, we assume success.
+        from bot.helpers.utils import extract_audio_metadata
 
-        # Placeholder for file discovery and metadata extraction
-        # For now, we'll just return a success message.
-        # The actual file processing will be added later.
+        items = []
+        downloaded_files = []
+        for root, _, files in os.walk(user_dir):
+            for file in files:
+                if file.lower().endswith(('.flac', '.mp3')): # Orpheus usually downloads as FLAC or MP3
+                    downloaded_files.append(os.path.join(root, file))
+
+        if not downloaded_files:
+            return {'success': False, 'error': "No media files found after download."}
+
+        for file_path in downloaded_files:
+            try:
+                metadata = await extract_audio_metadata(file_path)
+                metadata['filepath'] = file_path
+                metadata['provider'] = self.name
+                items.append(metadata)
+            except Exception as e:
+                LOGGER.error(f"Metadata extraction failed for {file_path}: {str(e)}")
+
+        if not items:
+            return {'success': False, 'error': "Failed to extract metadata from any downloaded files."}
+
+        content_type = 'track'
+        if len(items) > 1:
+            album_name = items[0].get('album')
+            if album_name and all(item.get('album') == album_name for item in items):
+                content_type = 'album'
+            else:
+                content_type = 'playlist'
 
         return {
             'success': True,
-            'type': 'album', # Placeholder
-            'items': [], # Placeholder
+            'type': content_type,
+            'items': items,
             'folderpath': user_dir,
-            'title': 'Deezer Download', # Placeholder
-            'artist': 'Various Artists' # Placeholder
+            'title': items[0].get('album') or items[0].get('title', 'Deezer Download'),
+            'artist': items[0].get('artist', 'Various Artists'),
+            'poster_msg': user['bot_msg']
         }
 
 
@@ -110,8 +130,14 @@ async def start_deezer(link: str, user: dict, options: dict = None):
             await edit_message(user['bot_msg'], f"❌ Error: {result['error']}")
             return
 
-        await edit_message(user['bot_msg'], "✅ Deezer download completed! Uploading will be handled next.")
-        # Uploading logic will be added here based on the result
+        if result['type'] == 'track':
+            await track_upload(result['items'][0], user)
+        elif result['type'] == 'album':
+            await album_upload(result, user)
+        elif result['type'] == 'playlist':
+            await playlist_upload(result, user)
+
+        await edit_message(user['bot_msg'], "✅ Deezer download and upload complete!")
 
     except asyncio.CancelledError:
         await edit_message(user['bot_msg'], "⏹️ Task cancelled.")

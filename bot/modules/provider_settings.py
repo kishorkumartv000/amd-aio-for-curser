@@ -246,15 +246,24 @@ async def tidal_login_cb(c, cb: CallbackQuery):
             return
 
         login_url, _ = await bot_set.tidal.login_get_url()
-        await edit_message(cb.message, lang.s.TIDAL_AUTH_URL.format(login_url), None)
-        # Placeholder for checking login status
-        # In a real scenario, you'd poll or have the user confirm.
-        await asyncio.sleep(10) # Simulate waiting time
+        markup = tidal_auth_buttons(confirm_login=True)
+        await edit_message(
+            cb.message,
+            f"Please open the following URL in your browser to log in:\n\n`{login_url}`\n\nAfter authorizing, click the 'Confirm Login' button below.",
+            markup
+        )
+
+@Client.on_callback_query(filters.regex(pattern=r"^tidalConfirmLogin"))
+async def tidal_confirm_login_cb(c, cb: CallbackQuery):
+    if await check_user(cb.from_user.id, restricted=True):
+        await c.answer_callback_query(cb.id, "Checking login status...", show_alert=False)
         if await bot_set.tidal.login_check_url():
             await bot_set.save_tidal_login(bot_set.tidal.get_session())
             await c.answer_callback_query(cb.id, lang.s.TIDAL_AUTH_SUCCESSFULL, show_alert=True)
         else:
-            await c.answer_callback_query(cb.id, lang.s.ERR_LOGIN_TIDAL_TV_FAILED.format("Timeout"), show_alert=True)
+            await c.answer_callback_query(cb.id, lang.s.ERR_LOGIN_TIDAL_TV_FAILED.format("Login not confirmed."), show_alert=True)
+
+        # Go back to the main auth panel
         await tidal_auth_cb(c, cb)
 
 

@@ -40,36 +40,35 @@ class QobuzProvider:
         os.makedirs(user_dir, exist_ok=True)
         LOGGER.info(f"Created Qobuz directory: {user_dir}")
 
+        config_path = os.path.join(user_dir, "rip.toml")
+        rip_config = "[qobuz]\n"
+        if self.token:
+            rip_config += f'token = "{self.token}"\n'
+        else:
+            rip_config += f'email = "{self.email}"\n'
+            rip_config += f'password = "{self.password}"\n'
+
+        with open(config_path, "w") as f:
+            f.write(rip_config)
+
         from bot.helpers.progress import ProgressReporter
         label = f"Qobuz • ID: {user.get('task_id','?')}"
         reporter = ProgressReporter(user['bot_msg'], label=label)
         user['progress'] = reporter
         await reporter.set_stage("Preparing")
 
-        # Construct the streamrip command
         cmd = [
-            "rip",
-            "url",
-            url,
-            "--output-directory", user_dir,
-            "--codec", "flac" # Default to FLAC
+            "rip", "url", url,
+            "--folder", user_dir,
+            "--config-path", config_path,
+            "--codec", "flac"
         ]
 
-        # Add credentials
-        if self.token:
-            cmd.extend(["--token", self.token])
-        else:
-            cmd.extend(["--email", self.email, "--password", self.password])
-
         LOGGER.info(f"Running Streamrip for Qobuz: {' '.join(cmd)}")
-
         process = await asyncio.create_subprocess_exec(
-            *cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE
+            *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
         )
 
-        # Register for cancellation
         try:
             if user.get('task_id'):
                 from bot.helpers.tasks import task_manager
@@ -80,19 +79,54 @@ class QobuzProvider:
         await reporter.set_stage("Downloading")
         stdout, stderr = await process.communicate()
 
+        os.remove(config_path)
+
         if process.returncode != 0:
             error = stderr.decode().strip() or stdout.decode().strip()
             LOGGER.error(f"Streamrip (Qobuz) failed: {error}")
             return {'success': False, 'error': error}
 
-        # Placeholder for file discovery and metadata extraction
+        from bot.helpers.utils import extract_audio_metadata
+
+        items = []
+        downloaded_files = []
+        for root, _, files in os.walk(user_dir):
+            for file in files:
+                if file.lower().endswith(('.flac', '.mp3', '.m4a')):
+                    downloaded_files.append(os.path.join(root, file))
+
+        if not downloaded_files:
+            return {'success': False, 'error': "No media files found after download."}
+
+        for file_path in downloaded_files:
+            try:
+                metadata = await extract_audio_metadata(file_path)
+                metadata['filepath'] = file_path
+                metadata['provider'] = self.name
+                items.append(metadata)
+            except Exception as e:
+                LOGGER.error(f"Metadata extraction failed for {file_path}: {str(e)}")
+
+        if not items:
+            return {'success': False, 'error': "Failed to extract metadata from any downloaded files."}
+
+        content_type = 'track'
+        if len(items) > 1:
+            # Check if all items belong to the same album
+            album_name = items[0].get('album')
+            if album_name and all(item.get('album') == album_name for item in items):
+                content_type = 'album'
+            else:
+                content_type = 'playlist'
+
         return {
             'success': True,
-            'type': 'album', # Placeholder
-            'items': [], # Placeholder
+            'type': content_type,
+            'items': items,
             'folderpath': user_dir,
-            'title': 'Qobuz Download', # Placeholder
-            'artist': 'Various Artists' # Placeholder
+            'title': items[0].get('album') or items[0].get('title', 'Qobuz Download'),
+            'artist': items[0].get('artist', 'Various Artists'),
+            'poster_msg': user['bot_msg']
         }
 
 
@@ -109,7 +143,14 @@ async def start_qobuz(link: str, user: dict, options: dict = None):
             await edit_message(user['bot_msg'], f"❌ Error: {result['error']}")
             return
 
-        await edit_message(user['bot_msg'], "✅ Qobuz download completed! Uploading will be handled next.")
+        if result['type'] == 'track':
+            await track_upload(result['items'][0], user)
+        elif result['type'] == 'album':
+            await album_upload(result, user)
+        elif result['type'] == 'playlist':
+            await playlist_upload(result, user)
+
+        await edit_message(user['bot_msg'], "✅ Qobuz download and upload complete!")
 
     except asyncio.CancelledError:
         await edit_message(user['bot_msg'], "⏹️ Task cancelled.")
