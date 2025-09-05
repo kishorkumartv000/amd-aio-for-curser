@@ -123,10 +123,10 @@ RUN pip install --upgrade tidal-dl-ng && \
     pip install --upgrade poetry && \
     poetry install --all-extras --with dev,docs
 
-# 12. Install Python dependencies
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-
+# 12. Install Python dependencies (use requirements.txt from /usr/src/app)
+RUN if [ -f /usr/src/app/requirements.txt ]; then \
+        pip install --no-cache-dir -r /usr/src/app/requirements.txt; \
+    fi
 
 # 13. Install wrapper (download only, don’t start)
 RUN ARCH=$(uname -m) && \
