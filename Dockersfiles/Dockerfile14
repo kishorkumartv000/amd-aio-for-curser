@@ -128,7 +128,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 
-# 16. Install wrapper (download only, don’t start)
+# 13. Install wrapper (download only, don’t start)
 RUN ARCH=$(uname -m) && \
     if [ "$ARCH" = "x86_64" ]; then \
         WRAPPER_URL="https://github.com/zhaarey/wrapper/releases/download/linux.V2/wrapper.x86_64.tar.gz"; \
@@ -144,18 +144,18 @@ RUN ARCH=$(uname -m) && \
     rm wrapper.tar.gz && \
     chmod +x wrapper
 
-# 17. Final cleanup (remove apt caches, repos, and bot files)
+# 14. Final cleanup (remove apt caches, repos, and bot files)
 RUN rm -rf /var/lib/apt/lists/* /tmp/* /root/.cache/* /usr/src/app/*
 
-# 18. Reset working directory (clean)
+# 15. Reset working directory (clean)
 WORKDIR /usr/src/app
 
-# 14. Set full permissions on working directory
+# 16. Set full permissions on working directory
 RUN chmod 777 /usr/src/app
 
-# 15. Add entrypoint script
+# 17. Add entrypoint script
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
-# 19. Use custom entrypoint
+# 18. Use custom entrypoint
 ENTRYPOINT ["/entrypoint.sh"]
