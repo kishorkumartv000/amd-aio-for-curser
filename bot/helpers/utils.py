@@ -726,7 +726,7 @@ def extract_cover_art(media, file_path):
                         with open(cover_path, 'wb') as f:
                             f.write(pic.data)
                         return cover_path
-                except:
+                except (OSError, IOError):
                     continue
     except Exception as e:
         LOGGER.error(f"Failed to extract cover art: {str(e)}")
@@ -766,7 +766,7 @@ async def create_apple_zip(directory: str, user_id: int, metadata: dict, progres
     # If name is empty after sanitization, use fallback
     if not safe_name.strip():
         safe_name = f"Apple_Music_{int(time.time())}"
-        LOGGER.warning(f"Empty content name after sanitization, using fallback: {safe_name}")
+        LOGGER.warn(f"Empty content name after sanitization, using fallback: {safe_name}")
     
     # Create descriptive filename based on content type
     if content_type.lower() == 'album':

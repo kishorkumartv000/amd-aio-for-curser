@@ -116,7 +116,7 @@ class AppleMusicProvider:
             # Mixed content - treat as playlist
             content_type = 'playlist'
             folder_path = os.path.dirname(os.path.commonpath([i['filepath'] for i in items]))
-            LOGGER.warning(f"Mixed video/audio content detected. Treating as playlist: {folder_path}")
+            LOGGER.warn(f"Mixed video/audio content detected. Treating as playlist: {folder_path}")
         else:
             # Pure audio collection
             content_type = 'album'
