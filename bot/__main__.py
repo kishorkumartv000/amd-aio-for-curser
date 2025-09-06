@@ -25,7 +25,7 @@ if __name__ == "__main__":
     # Ensure Apple Music downloader is installed and executable
     downloader_path = Config.DOWNLOADER_PATH
     if not os.path.exists(downloader_path):
-        LOGGER.warning("Apple Music downloader not found! Attempting installation...")
+        LOGGER.warn("Apple Music downloader not found! Attempting installation...")
         try:
             subprocess.run([Config.INSTALLER_PATH], check=True)
             LOGGER.info("Apple Music downloader installed successfully")

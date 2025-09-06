@@ -38,7 +38,7 @@ def __decrypt_string__(string):
         s = base64.b64decode(string)
         s = s.decode()
         return s
-    except:
+    except (ValueError, TypeError):
         return string
 
 class BotSettings:
@@ -169,7 +169,7 @@ class BotSettings:
         
         # Ensure downloader is installed
         if not os.path.exists(Config.DOWNLOADER_PATH):
-            LOGGER.warning("Apple Music downloader not found! Attempting installation...")
+            LOGGER.warn("Apple Music downloader not found! Attempting installation...")
             try:
                 subprocess.run([Config.INSTALLER_PATH], check=True)
                 LOGGER.info("Apple Music downloader installed successfully")

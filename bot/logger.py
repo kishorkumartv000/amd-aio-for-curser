@@ -9,7 +9,7 @@ class Logger:
     def __init__(self):
         try:
             logging.getLogger().removeHandler(logging.getLogger().handlers[0])
-        except:
+        except (IndexError, AttributeError):
             pass
         self.logger = logging.getLogger()
         self.logger.setLevel(logging.DEBUG)
@@ -47,6 +47,11 @@ class Logger:
 
     def info(self, message, *args, **kwargs):
         self.logger.info(message, *args, **kwargs)
+
+    def warn(self, message, *args, **kwargs):
+        caller_frame = inspect.currentframe().f_back
+        caller_filename = os.path.basename(caller_frame.f_globals['__file__'])
+        self.logger.warning(f'{caller_filename} - {message}', *args, **kwargs)
 
     def error(self, message, *args, **kwargs):
         caller_frame = inspect.currentframe().f_back
