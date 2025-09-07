@@ -1,0 +1,148 @@
+FROM python:3.12
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    TZ=Asia/Kolkata \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 
+
+WORKDIR /usr/src/app
+
+# 1. Install system dependencies and multimedia tools
+RUN apt-get update -qq && \
+    apt-get install -qq -y --no-install-recommends \
+    ffmpeg \
+    gcc \
+    libffi-dev \
+    fuse3 \
+    build-essential \
+    zlib1g-dev \
+    wget \
+    cmake \
+    pkg-config \
+    libssl-dev \
+    unzip \
+    zip \
+    libxml2 \
+    libxslt1.1 \
+    curl \
+    sudo \
+    vim \
+    nano \
+    git \
+    net-tools \
+    iputils-ping \
+    tar \
+    make \
+    automake \
+    autoconf \
+    libtool \
+    pkg-config && \
+    rm -rf /var/lib/apt/lists/*
+
+# 2. Install Bento4
+RUN ARCH=$(uname -m) && \
+    if [ "$ARCH" = "x86_64" ]; then \
+        BENTO4_URL="https://github.com/kishorkumartv000/amd-bootstrap-for-test/raw/refs/heads/main/Bento4-SDK-1-6-0-641.x86_64-unknown-linux.zip"; \
+    elif [ "$ARCH" = "aarch64" ]; then \
+        BENTO4_URL="https://github.com/axiomatic-systems/Bento4/releases/download/v1.6.0-639/Bento4-SDK-1.6.0-639.aarch64-unknown-linux.zip"; \
+    else \
+        echo "Unsupported architecture: $ARCH"; exit 1; \
+    fi && \
+    mkdir -p /tmp/Bento4 && \
+    cd /tmp/Bento4 && \
+    wget -q "$BENTO4_URL" -O bento4.zip && \
+    unzip -o -q bento4.zip && \
+    if [ -d "Bento4-SDK-1-6-0-641.x86_64-unknown-linux" ]; then \
+        cd Bento4-SDK-1-6-0-641.x86_64-unknown-linux; \
+    elif [ -d "Bento4-SDK-1.6.0-639.x86_64-unknown-linux" ]; then \
+        cd Bento4-SDK-1.6.0-639.x86_64-unknown-linux; \
+    elif [ -d "Bento4-SDK-1.6.0-639.aarch64-unknown-linux" ]; then \
+        cd Bento4-SDK-1.6.0-639.aarch64-unknown-linux; \
+    else \
+        cd Bento4-SDK-*; \
+    fi && \
+    find bin/ -maxdepth 1 -type f -executable -exec cp {} /usr/local/bin \; && \
+    cp -r include /usr/local/include/Bento4 && \
+    cp -r lib /usr/local/lib/Bento4 && \
+    rm -rf /tmp/Bento4
+
+# 3. Build GPAC (MP4Box) from source
+RUN mkdir -p /tmp/gpac && \
+    cd /tmp/gpac && \
+    git clone https://github.com/gpac/gpac.git && \
+    cd gpac && \
+    ./configure --static-bin && \
+    make -j"$(nproc)" && \
+    make install && \
+    chmod +x /usr/local/bin/MP4Box && \
+    rm -rf /tmp/gpac && \
+    MP4Box -version
+
+# 4. Install rclone
+RUN ARCH=$(uname -m) && \
+    if [ "$ARCH" = "x86_64" ]; then ARCH="amd64"; \
+    elif [ "$ARCH" = "aarch64" ]; then ARCH="arm64"; fi && \
+    curl -sO https://downloads.rclone.org/v1.68.2/rclone-v1.68.2-linux-${ARCH}.zip && \
+    unzip -q rclone-v1.68.2-linux-${ARCH}.zip && \
+    install -m 755 rclone-v1.68.2-linux-${ARCH}/rclone /usr/bin/rclone && \
+    rm -rf rclone-v1.68.2-linux-${ARCH}*
+
+# Create rclone config directory and empty config file
+RUN mkdir -p /root/.config/rclone && \
+    touch /root/.config/rclone/rclone.conf
+
+# 5. Install N_m3u8DL-RE
+RUN mkdir -p /tmp/N_m3u8DL-RE && \
+    cd /tmp/N_m3u8DL-RE && \
+    wget -q "https://github.com/nilaoda/N_m3u8DL-RE/releases/download/v0.3.0-beta/N_m3u8DL-RE_v0.3.0-beta_linux-x64_20241203.tar.gz" && \
+    tar -xzf N_m3u8DL-RE_v0.3.0-beta_linux-x64_20241203.tar.gz && \
+    cp N_m3u8DL-RE /usr/bin/ && \
+    chmod +x /usr/bin/N_m3u8DL-RE && \
+    rm -rf /tmp/N_m3u8DL-RE
+
+# 6. Create music output directories
+RUN mkdir -p /root/Music/Apple\ Music/alac \
+             /root/Music/Apple\ Music/atmos \
+             /root/Music/Apple\ Music/aac
+
+# 7. Clone amd-aio-for-curser into workdir and flatten
+RUN git clone https://github.com/kishorkumartv000/amd-aio-for-curser.git /tmp/amd-aio && \
+    cp -r /tmp/amd-aio/* /usr/src/app/ && \
+    rm -rf /tmp/amd-aio
+
+# 8. Clone tidal-dl-ng repo (keep folder intact)
+RUN git clone https://github.com/exislow/tidal-dl-ng.git /usr/src/app/tidal-dl-ng
+
+# 9. Install Tidal-dl-ng + python-ffmpeg
+RUN pip install --upgrade tidal-dl-ng python-ffmpeg && \
+    cd /usr/src/app/tidal-dl-ng && \
+    pip install --upgrade poetry && \
+    poetry install --all-extras --with dev,docs
+
+# 10. Install Python dependencies (use requirements.txt from /usr/src/app)
+RUN if [ -f /usr/src/app/requirements.txt ]; then \
+        pip install --no-cache-dir -r /usr/src/app/requirements.txt; \
+    fi
+
+# 11. Final cleanup (remove apt caches, repos, and bot files)
+RUN rm -rf /var/lib/apt/lists/* /tmp/* /root/.cache/*
+
+# 12. Reset working directory (clean)
+WORKDIR /usr/src/app
+
+# 13. Set full permissions on working directory
+RUN chmod 777 /usr/src/app
+
+# 14. Copy scripts
+COPY go_instalation.sh /go_instalation.sh
+COPY setup_wrapper.sh /setup_wrapper.sh
+COPY entrypoint.sh /entrypoint.sh
+
+# 15. Make scripts executable
+RUN chmod +x /go_instalation.sh /setup_wrapper.sh /entrypoint.sh
+
+# 16. Run setup scripts during build
+RUN bash /go_instalation.sh && bash /setup_wrapper.sh
+
+# 17. Use custom entrypoint
+ENTRYPOINT ["/entrypoint.sh"]
