@@ -120,10 +120,10 @@ COPY setup_wrapper.sh /setup_wrapper.sh
 COPY entrypoint.sh /entrypoint.sh
 
 # 11. Make scripts executable
-RUN chmod +x /go_instalation.sh /setup_wrapper.sh /entrypoint.sh
+RUN chmod +x /go_installation.sh /setup_wrapper.sh /entrypoint.sh
 
 # 12. Run setup scripts during build
-RUN bash /go_instalation.sh && bash /setup_wrapper.sh
+RUN bash /go_installation.sh && bash /setup_wrapper.sh
 
 # 13. Use custom entrypoint
 ENTRYPOINT ["/entrypoint.sh"]
