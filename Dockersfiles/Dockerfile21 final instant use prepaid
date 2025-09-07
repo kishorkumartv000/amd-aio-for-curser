@@ -100,20 +100,37 @@ RUN mkdir -p /tmp/N_m3u8DL-RE && \
     chmod +x /usr/bin/N_m3u8DL-RE && \
     rm -rf /tmp/N_m3u8DL-RE
 
-# 6. Create music output directories
+# 6. Copy Go setup scripts
+COPY go_installation.sh /go_installation.sh
+COPY setup_wrapper.sh /setup_wrapper.sh
+
+# 7. Make Go setup scripts executable
+RUN chmod +x /go_installation.sh /setup_wrapper.sh
+
+# 8. Run Go setup scripts
+RUN bash /go_installation.sh && bash /setup_wrapper.sh
+
+# 9. Create music output directories
 RUN mkdir -p /root/Music/Apple\ Music/alac \
              /root/Music/Apple\ Music/atmos \
              /root/Music/Apple\ Music/aac
 
-# 7. Clone amd-aio-for-curser into workdir and flatten
+# 10. Pre-clone amalac repo and build Go project
+RUN git clone https://github.com/zhaarey/apple-music-alac-atmos-downloader.git /root/amalac && \
+    cd /root/amalac && \
+    /usr/local/go/bin/go clean -modcache && \
+    /usr/local/go/bin/go get -u ./... && \
+    /usr/local/go/bin/go mod tidy
+
+# 11. Clone amd-aio-for-curser into workdir and flatten
 RUN git clone https://github.com/kishorkumartv000/amd-aio-for-curser.git /tmp/amd-aio && \
     cp -r /tmp/amd-aio/* /usr/src/app/ && \
     rm -rf /tmp/amd-aio
 
-# 8. Clone tidal-dl-ng repo (keep folder intact)
+# 12. Clone tidal-dl-ng repo (keep folder intact)
 RUN git clone https://github.com/exislow/tidal-dl-ng.git /usr/src/app/tidal-dl-ng
 
-# 9. Install Tidal-dl-ng + python-ffmpeg, then remove repo
+# 13. Install Tidal-dl-ng + python-ffmpeg, then remove repo
 RUN pip install --upgrade tidal-dl-ng python-ffmpeg && \
     cd /usr/src/app/tidal-dl-ng && \
     pip install --upgrade poetry && \
@@ -121,30 +138,25 @@ RUN pip install --upgrade tidal-dl-ng python-ffmpeg && \
     cd /usr/src/app && \
     rm -rf /usr/src/app/tidal-dl-ng
 
-# 10. Install Python dependencies (use requirements.txt from /usr/src/app)
+# 14. Install Python dependencies (use requirements.txt from /usr/src/app)
 RUN if [ -f /usr/src/app/requirements.txt ]; then \
         pip install --no-cache-dir -r /usr/src/app/requirements.txt; \
     fi
 
-# 11. Final cleanup (remove apt caches, repos, and bot files)
+# 15. Final cleanup (remove apt caches, repos, and bot files)
 RUN rm -rf /var/lib/apt/lists/* /tmp/* /root/.cache/*
 
-# 12. Reset working directory (clean)
+# 16. Reset working directory (clean)
 WORKDIR /usr/src/app
 
-# 13. Set full permissions on working directory
+# 17. Set full permissions on working directory
 RUN chmod 777 /usr/src/app
 
-# 14. Copy scripts
-COPY go_installation.sh /go_installation.sh
-COPY setup_wrapper.sh /setup_wrapper.sh
+# 18. Copy entrypoint script
 COPY entrypoint.sh /entrypoint.sh
 
-# 15. Make scripts executable
-RUN chmod +x /go_installation.sh /setup_wrapper.sh /entrypoint.sh
+# 19. Make entrypoint executable
+RUN chmod +x /entrypoint.sh
 
-# 16. Run setup scripts during build
-RUN bash /go_installation.sh && bash /setup_wrapper.sh
-
-# 17. Use custom entrypoint
+# 20. Use custom entrypoint
 ENTRYPOINT ["/entrypoint.sh"]
