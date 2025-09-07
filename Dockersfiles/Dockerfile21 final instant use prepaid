@@ -113,11 +113,13 @@ RUN git clone https://github.com/kishorkumartv000/amd-aio-for-curser.git /tmp/am
 # 8. Clone tidal-dl-ng repo (keep folder intact)
 RUN git clone https://github.com/exislow/tidal-dl-ng.git /usr/src/app/tidal-dl-ng
 
-# 9. Install Tidal-dl-ng + python-ffmpeg
+# 9. Install Tidal-dl-ng + python-ffmpeg, then remove repo
 RUN pip install --upgrade tidal-dl-ng python-ffmpeg && \
     cd /usr/src/app/tidal-dl-ng && \
     pip install --upgrade poetry && \
-    poetry install --all-extras --with dev,docs
+    poetry install --all-extras --with dev,docs && \
+    cd /usr/src/app && \
+    rm -rf /usr/src/app/tidal-dl-ng
 
 # 10. Install Python dependencies (use requirements.txt from /usr/src/app)
 RUN if [ -f /usr/src/app/requirements.txt ]; then \
