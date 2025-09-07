@@ -110,6 +110,21 @@ async def rclone_list_remotes_cb(client, cb:CallbackQuery):
         except Exception as e:
             await edit_message(cb.message, f"Error: {e}", markup=rclone_buttons())
 
+@Client.on_callback_query(filters.regex(pattern=r"^rcloneScope$"))
+async def rclone_scope_cb(client, cb:CallbackQuery):
+    if await check_user(cb.from_user.id, restricted=True):
+        try:
+            current = (getattr(bot_set, 'rclone_copy_scope', 'FILE') or 'FILE').upper()
+            new_val = 'FOLDER' if current == 'FILE' else 'FILE'
+            bot_set.rclone_copy_scope = new_val
+            set_db.set_variable('RCLONE_COPY_SCOPE', new_val)
+        except Exception:
+            pass
+        try:
+            await rclone_panel_cb(client, cb)
+        except Exception:
+            pass
+
 @Client.on_callback_query(filters.regex(pattern=r"^rcloneSend"))
 async def rclone_send_cb(client, cb:CallbackQuery):
     if await check_user(cb.from_user.id, restricted=True):
@@ -118,7 +133,7 @@ async def rclone_send_cb(client, cb:CallbackQuery):
             return await edit_message(cb.message, "rclone.conf not found.", markup=rclone_buttons())
         # Send the file as document
         try:
-            await send_message(cb, './rclone.conf', 'doc')
+            await send_message(cb.message, './rclone.conf', 'doc')
         except Exception:
             await edit_message(cb.message, "❌ Failed to send rclone.conf", markup=rclone_buttons())
 

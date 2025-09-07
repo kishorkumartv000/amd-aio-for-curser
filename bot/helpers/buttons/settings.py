@@ -101,7 +101,7 @@ def core_buttons():
             [
                 InlineKeyboardButton(
                     text=f"Return Link : {bot_set.link_options}",
-                    callback_data='linkOptions'
+                    callback_data='linkOption'
                 )
             ]
         )

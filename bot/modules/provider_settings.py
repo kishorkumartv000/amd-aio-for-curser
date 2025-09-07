@@ -141,13 +141,14 @@ async def apple_quality_cb(c, cb: CallbackQuery):
             'atmos': ['2768', '3072', '3456']
         }
         current_format = Config.APPLE_DEFAULT_FORMAT
-        current_quality = getattr(Config, f'APPLE_{current_format.upper()}_QUALITY')
+        # Normalize to string for comparison against button values
+        current_quality = str(getattr(Config, f'APPLE_{current_format.upper()}_QUALITY'))
         
         # Create quality buttons
         buttons = []
         for quality in qualities[current_format]:
             label = f"{quality} kbps"
-            if quality == current_quality:
+            if str(quality) == current_quality:
                 label += " ✅"
             buttons.append([InlineKeyboardButton(label, callback_data=f"appleSQ_{current_format}_{quality}")])
         
@@ -165,9 +166,13 @@ async def apple_quality_cb(c, cb: CallbackQuery):
 async def apple_set_quality_cb(c, cb: CallbackQuery):
     if await check_user(cb.from_user.id, restricted=True):
         _, format_type, quality = cb.data.split('_')
-        # Update configuration
-        set_db.set_variable(f'APPLE_{format_type.upper()}_QUALITY', quality)
-        setattr(Config, f'APPLE_{format_type.upper()}_QUALITY', quality)
+        # Update configuration (store as int for consistency)
+        try:
+            quality_val = int(quality)
+        except Exception:
+            quality_val = int(str(quality).strip())
+        set_db.set_variable(f'APPLE_{format_type.upper()}_QUALITY', quality_val)
+        setattr(Config, f'APPLE_{format_type.upper()}_QUALITY', quality_val)
         await apple_quality_cb(c, cb)
 
 
