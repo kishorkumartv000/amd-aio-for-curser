@@ -87,11 +87,11 @@ RUN ARCH=$(uname -m) && \
     install -m 755 rclone-v1.68.2-linux-${ARCH}/rclone /usr/bin/rclone && \
     rm -rf rclone-v1.68.2-linux-${ARCH}*
 
-# Create rclone config directory and empty config file
+# 5. Create rclone config directory and empty config file
 RUN mkdir -p /root/.config/rclone && \
     touch /root/.config/rclone/rclone.conf
 
-# 5. Install N_m3u8DL-RE
+# 6. Install N_m3u8DL-RE
 RUN mkdir -p /tmp/N_m3u8DL-RE && \
     cd /tmp/N_m3u8DL-RE && \
     wget -q "https://github.com/nilaoda/N_m3u8DL-RE/releases/download/v0.3.0-beta/N_m3u8DL-RE_v0.3.0-beta_linux-x64_20241203.tar.gz" && \
@@ -100,30 +100,42 @@ RUN mkdir -p /tmp/N_m3u8DL-RE && \
     chmod +x /usr/bin/N_m3u8DL-RE && \
     rm -rf /tmp/N_m3u8DL-RE
 
-# 6. Create music output directories
+# 7. Copy Go setup scripts
+COPY go_installation.sh /go_installation.sh
+COPY setup_wrapper.sh /setup_wrapper.sh
+
+# 8. Make Go setup scripts executable
+RUN chmod +x /go_installation.sh /setup_wrapper.sh
+
+# 9. Run Go setup scripts
+RUN bash /go_installation.sh && bash /setup_wrapper.sh
+
+# 10. Create music output directories
 RUN mkdir -p /root/Music/Apple\ Music/alac \
              /root/Music/Apple\ Music/atmos \
              /root/Music/Apple\ Music/aac
 
-# 7. Final cleanup (remove apt caches and temporary files)
+# 11. Pre-clone amalac repo and build Go project
+RUN git clone https://github.com/zhaarey/apple-music-alac-atmos-downloader.git /root/amalac && \
+    cd /root/amalac && \
+    /usr/local/go/bin/go clean -modcache && \
+    /usr/local/go/bin/go get -u ./... && \
+    /usr/local/go/bin/go mod tidy
+
+# 12. Final cleanup (remove apt caches and temporary files)
 RUN rm -rf /var/lib/apt/lists/* /tmp/* /root/.cache/*
 
-# 8. Reset working directory
+# 13. Reset working directory
 WORKDIR /usr/src/app
 
-# 9. Set full permissions on working directory
+# 14. Set full permissions on working directory
 RUN chmod 777 /usr/src/app
 
-# 10. Copy scripts
-COPY go_installation.sh /go_installation.sh
-COPY setup_wrapper.sh /setup_wrapper.sh
+# 15. Copy entrypoint script
 COPY entrypoint.sh /entrypoint.sh
 
-# 11. Make scripts executable
-RUN chmod +x /go_installation.sh /setup_wrapper.sh /entrypoint.sh
+# 16. Make entrypoint executable
+RUN chmod +x /entrypoint.sh
 
-# 12. Run setup scripts during build
-RUN bash /go_installation.sh && bash /setup_wrapper.sh
-
-# 13. Use custom entrypoint
+# 17. Use custom entrypoint
 ENTRYPOINT ["/entrypoint.sh"]
