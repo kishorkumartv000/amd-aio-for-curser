@@ -100,14 +100,14 @@ RUN mkdir -p /tmp/N_m3u8DL-RE && \
     chmod +x /usr/bin/N_m3u8DL-RE && \
     rm -rf /tmp/N_m3u8DL-RE
 
-# 7. Copy Go setup scripts
+# 7. Copy Go and Wrapper setup scripts
 COPY go_installation.sh /go_installation.sh
 COPY setup_wrapper.sh /setup_wrapper.sh
 
-# 8. Make Go setup scripts executable
+# 8. Make Go and Wrapper setup scripts executable
 RUN chmod +x /go_installation.sh /setup_wrapper.sh
 
-# 9. Run Go setup scripts
+# 9. Run Go and Wrapper setup scripts
 RUN bash /go_installation.sh && bash /setup_wrapper.sh
 
 # 10. Create music output directories
