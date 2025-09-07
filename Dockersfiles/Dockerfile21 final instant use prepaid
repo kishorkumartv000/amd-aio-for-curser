@@ -134,7 +134,7 @@ WORKDIR /usr/src/app
 RUN chmod 777 /usr/src/app
 
 # 14. Copy scripts
-COPY go_instalation.sh /go_instalation.sh
+COPY go_installation.sh /go_installation.sh
 COPY setup_wrapper.sh /setup_wrapper.sh
 COPY entrypoint.sh /entrypoint.sh
 
