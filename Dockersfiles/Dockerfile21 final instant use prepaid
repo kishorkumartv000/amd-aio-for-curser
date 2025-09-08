@@ -105,17 +105,17 @@ RUN git clone --depth 1 https://github.com/kishorkumartv000/amd-aio-for-curser.g
     cp -r /tmp/amd-aio/* /usr/src/app/ && \
     rm -rf /tmp/amd-aio
 
-# 9. Install Python dependencies (use requirements.txt from /usr/src/app)
+# 7. Install Python dependencies (use requirements.txt from /usr/src/app)
 RUN if [ -f /usr/src/app/requirements.txt ]; then \
         pip install --no-cache-dir -r /usr/src/app/requirements.txt; \
     fi
 
-# 7. Clone tidal-dl-ng into temp, move to workdir, then clean temp
+# 8. Clone tidal-dl-ng into temp, move to workdir, then clean temp
 RUN git clone --depth 1 https://github.com/exislow/tidal-dl-ng.git /tmp/tidal-dl-ng && \
     cp -r /tmp/tidal-dl-ng /usr/src/app/tidal-dl-ng && \
     rm -rf /tmp/tidal-dl-ng
 
-# 8. Install Tidal-dl-ng + python-ffmpeg, then remove repo
+# 9. Install Tidal-dl-ng + python-ffmpeg, then remove repo
 RUN pip install --upgrade tidal-dl-ng python-ffmpeg && \
     cd /usr/src/app/tidal-dl-ng && \
     pip install --upgrade poetry && \
@@ -126,11 +126,11 @@ RUN pip install --upgrade tidal-dl-ng python-ffmpeg && \
 # 10. Final cleanup (remove apt caches, repos, and bot files)
 RUN rm -rf /var/lib/apt/lists/* /tmp/* /root/.cache/*
 
-# 13. Copy Go and Wrapper setup scripts
+# 11. Copy Go and Wrapper setup scripts
 COPY go_installation.sh /go_installation.sh
 COPY setup_wrapper.sh /setup_wrapper.sh
 
-# 14. Make Go and Wrapper setup scripts executable and run them
+# 12. Make Go and Wrapper setup scripts executable and run them
 RUN chmod +x /go_installation.sh /setup_wrapper.sh && \
     bash /go_installation.sh && \
     bash /setup_wrapper.sh
