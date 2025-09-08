@@ -130,10 +130,8 @@ RUN rm -rf /var/lib/apt/lists/* /tmp/* /root/.cache/*
 COPY go_installation.sh /go_installation.sh
 COPY setup_wrapper.sh /setup_wrapper.sh
 
-# 12. Make Go and Wrapper setup scripts executable and run them
-RUN chmod +x /go_installation.sh /setup_wrapper.sh && \
-    bash /go_installation.sh && \
-    bash /setup_wrapper.sh
+RUN chmod +x /go_installation.sh && bash /go_installation.sh
+RUN chmod +x /setup_wrapper.sh && bash /setup_wrapper.sh
 
 RUN rm -rf /usr/src/app/*
 
