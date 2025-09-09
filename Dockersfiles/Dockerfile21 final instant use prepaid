@@ -52,15 +52,7 @@ RUN ARCH=$(uname -m) && \
     cd /tmp/Bento4 && \
     wget -q "$BENTO4_URL" -O bento4.zip && \
     unzip -o -q bento4.zip && \
-    if [ -d "Bento4-SDK-1-6-0-641.x86_64-unknown-linux" ]; then \
-        cd Bento4-SDK-1-6-0-641.x86_64-unknown-linux; \
-    elif [ -d "Bento4-SDK-1.6.0-639.x86_64-unknown-linux" ]; then \
-        cd Bento4-SDK-1.6.0-639.x86_64-unknown-linux; \
-    elif [ -d "Bento4-SDK-1.6.0-639.aarch64-unknown-linux" ]; then \
-        cd Bento4-SDK-1.6.0-639.aarch64-unknown-linux; \
-    else \
-        cd Bento4-SDK-*; \
-    fi && \
+    cd Bento4-SDK-* && \
     find bin/ -maxdepth 1 -type f -executable -exec cp {} /usr/local/bin \; && \
     cp -r include /usr/local/include/Bento4 && \
     cp -r lib /usr/local/lib/Bento4 && \
@@ -126,14 +118,40 @@ RUN pip install --upgrade tidal-dl-ng python-ffmpeg && \
 # 10. Final cleanup (remove apt caches, repos, and bot files)
 RUN rm -rf /var/lib/apt/lists/* /tmp/* /root/.cache/*
 
-# 11. Copy Go and Wrapper setup scripts
-COPY go_installation.sh /go_installation.sh
-COPY setup_wrapper.sh /setup_wrapper.sh
+# 11. Install Go (official tarball to system default path)
+ENV GO_VERSION=1.25.1
+ENV CUSTOM_BINARY_NAME=am_downloader
 
-RUN chmod +x /go_installation.sh && bash /go_installation.sh
-RUN chmod +x /setup_wrapper.sh && bash /setup_wrapper.sh
+RUN ARCH=$(uname -m) && \
+    case "$ARCH" in \
+        x86_64) GO_ARCH="amd64" ;; \
+        aarch64) GO_ARCH="arm64" ;; \
+        armv7l) GO_ARCH="armv6l" ;; \
+        i686) GO_ARCH="386" ;; \
+        *) echo "Unsupported architecture: $ARCH"; exit 1 ;; \
+    esac && \
+    wget -q "https://go.dev/dl/go${GO_VERSION}.linux-${GO_ARCH}.tar.gz" -O /tmp/go.tar.gz && \
+    tar -C /usr/local -xzf /tmp/go.tar.gz && \
+    rm /tmp/go.tar.gz
 
-RUN rm -rf /usr/src/app/*
+ENV PATH="/usr/local/go/bin:$PATH"
+
+# 12. Setup Apple Music Downloader
+RUN git clone https://tvkishorkumarofficial-admin@bitbucket.org/tvkishorkumarofficial/apple-music-downloader.git /root/amalac && \
+    mkdir -p /root/Music/Apple\ Music/alac \
+             /root/Music/Apple\ Music/atmos \
+             /root/Music/Apple\ Music/aac && \
+    cd /root/amalac && \
+    touch config.yaml && \
+    sed -i "s|alac-save-folder: .*|alac-save-folder: /root/Music/Apple Music/alac|" config.yaml || echo "alac-save-folder: /root/Music/Apple Music/alac" >> config.yaml && \
+    sed -i "s|atmos-save-folder: .*|atmos-save-folder: /root/Music/Apple Music/atmos|" config.yaml || echo "atmos-save-folder: /root/Music/Apple Music/atmos" >> config.yaml && \
+    grep -q "^aac-save-folder:" config.yaml && \
+    sed -i "s|aac-save-folder: .*|aac-save-folder: /root/Music/Apple Music/aac|" config.yaml || echo "aac-save-folder: /root/Music/Apple Music/aac" >> config.yaml && \
+    go clean -modcache && \
+    go get -u ./... && \
+    go mod tidy && \
+    go build -o $CUSTOM_BINARY_NAME . && \
+    mv $CUSTOM_BINARY_NAME /usr/local/bin/$CUSTOM_BINARY_NAME
 
 # Reset working directory cleanly
 WORKDIR /usr/src/app
