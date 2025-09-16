@@ -77,14 +77,25 @@ class AppleMusicProvider:
             reporter.update_download(tracks_done=len(items))
         
         has_video = any(f.endswith(('.mp4', '.m4v', '.mov')) for f in files)
-        folder_path = await asyncio.to_thread(os.path.dirname, os.path.commonpath([i['filepath'] for i in items]))
-        
-        content_type = 'album'
-        if len(items) == 1:
-            content_type = 'video' if has_video else 'track'
-        elif has_video:
+        has_audio = any(f.endswith(('.m4a', '.flac', '.alac')) for f in files)
+        is_single = len(items) == 1
+
+        if is_single:
+            if has_video:
+                content_type = 'video'
+                folder_path = await asyncio.to_thread(os.path.dirname, items[0]['filepath'])
+            else:
+                content_type = 'track'
+                folder_path = await asyncio.to_thread(os.path.dirname, items[0]['filepath'])
+        elif has_video and has_audio:
+            # Mixed content - treat as playlist
             content_type = 'playlist'
+            folder_path = await asyncio.to_thread(os.path.commonpath, [i['filepath'] for i in items])
             LOGGER.error(f"Mixed video/audio content detected. Treating as playlist: {folder_path}")
+        else:
+            # Pure audio or video collection
+            content_type = 'album'
+            folder_path = await asyncio.to_thread(os.path.commonpath, [i['filepath'] for i in items])
 
         album_title = items[0].get('album', items[0]['title'])
         download_history.record_download(
