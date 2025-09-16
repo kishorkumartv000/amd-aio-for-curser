@@ -15,8 +15,6 @@ from bot.helpers.utils import (
 )
 from bot.helpers.uploader import track_upload, album_upload, music_video_upload, artist_upload, playlist_upload
 from bot.helpers.database.pg_impl import download_history
-from bot.helpers.progress import ProgressReporter
-from bot.helpers.status import start_status_updater, stop_status_updater
 from config import Config
 from bot.logger import LOGGER
 
@@ -40,25 +38,45 @@ class AppleMusicProvider:
 
     async def process(self, url: str, user: dict, options: dict = None) -> dict:
         """Process Apple Music URL with options"""
+        # Create user-specific directory
         user_dir = os.path.join(Config.LOCAL_STORAGE, str(user['user_id']), "Apple Music")
-        await asyncio.to_thread(os.makedirs, user_dir, exist_ok=True)
+        os.makedirs(user_dir, exist_ok=True)
         LOGGER.info(f"Created temporary working directory for Apple Music task: {user_dir}")
         
+        # Process options
         cmd_options = self.build_options(options)
-        reporter = user.get('progress')
+
+        # Initialize progress reporter
+        from bot.helpers.progress import ProgressReporter
+        label = f"Apple Music • ID: {user.get('task_id','?')}"
+        reporter = ProgressReporter(user['bot_msg'], label=label)
+        user['progress'] = reporter
+        await reporter.set_stage("Preparing")
         
+        # Download content
         result = await run_apple_downloader(
-            url, user_dir, cmd_options, user, reporter, user.get('task_id'), user.get('cancel_event')
+            url,
+            user_dir,
+            cmd_options,
+            user,
+            progress=reporter,
+            task_id=user.get('task_id'),
+            cancel_event=user.get('cancel_event')
         )
-        if not result.get('success'):
+        if not result['success']:
+            LOGGER.error(f"Apple downloader failed: {result['error']}")
             return result
         
-        files = await asyncio.to_thread(list_apple_output_files)
+        # Find downloaded files from global Apple folders (alac/atmos/aac)
+        files = list_apple_output_files()
+
         if not files:
+            LOGGER.error("No files found in global Apple output folders")
             return {'success': False, 'error': "No files downloaded"}
         
         LOGGER.info(f"Found {len(files)} files in global Apple output folders")
         
+        # Extract metadata
         items = []
         for file_path in files:
             try:
@@ -66,16 +84,23 @@ class AppleMusicProvider:
                 metadata['filepath'] = file_path
                 metadata['provider'] = self.name
                 items.append(metadata)
+                LOGGER.info(f"Processed file: {file_path}")
             except Exception as e:
-                LOGGER.error(f"Metadata extraction failed for {file_path}: {e}")
+                LOGGER.error(f"Metadata extraction failed for {file_path}: {str(e)}")
         
+        # Handle case where no metadata was extracted
         if not items:
+            LOGGER.error("No valid metadata extracted for any files")
             return {'success': False, 'error': "Metadata extraction failed"}
         
-        if reporter:
-            reporter.set_total_tracks(len(items))
-            reporter.update_download(tracks_done=len(items))
+        # Update progress with total tracks
+        try:
+            await user['progress'].set_total_tracks(len(items))
+            await user['progress'].update_download(tracks_done=len(items))
+        except Exception:
+            pass
         
+        # Determine content type based on file types
         has_video = any(f.endswith(('.mp4', '.m4v', '.mov')) for f in files)
         has_audio = any(f.endswith(('.m4a', '.flac', '.alac')) for f in files)
         is_single = len(items) == 1
@@ -83,99 +108,135 @@ class AppleMusicProvider:
         if is_single:
             if has_video:
                 content_type = 'video'
-                folder_path = await asyncio.to_thread(os.path.dirname, items[0]['filepath'])
+                folder_path = os.path.dirname(items[0]['filepath'])
             else:
                 content_type = 'track'
-                folder_path = await asyncio.to_thread(os.path.dirname, items[0]['filepath'])
+                folder_path = os.path.dirname(items[0]['filepath'])
         elif has_video and has_audio:
             # Mixed content - treat as playlist
             content_type = 'playlist'
-            folder_path = await asyncio.to_thread(os.path.commonpath, [i['filepath'] for i in items])
-            LOGGER.error(f"Mixed video/audio content detected. Treating as playlist: {folder_path}")
+            folder_path = os.path.dirname(os.path.commonpath([i['filepath'] for i in items]))
+            LOGGER.warning(f"Mixed video/audio content detected. Treating as playlist: {folder_path}")
         else:
-            # Pure audio or video collection
+            # Pure audio collection
             content_type = 'album'
-            folder_path = await asyncio.to_thread(os.path.commonpath, [i['filepath'] for i in items])
+            folder_path = os.path.dirname(os.path.commonpath([i['filepath'] for i in items]))
 
+        # Record download in history
+        content_id = self.extract_content_id(url)
+        quality = options.get('mv-max', Config.APPLE_ATMOS_QUALITY) if has_video else \
+                 options.get('alac-max', Config.APPLE_ALAC_QUALITY) if 'alac' in (options or {}) else \
+                 options.get('atmos-max', Config.APPLE_ATMOS_QUALITY)
+
+        # Use first item's title if album title is missing
         album_title = items[0].get('album', items[0]['title'])
+
         download_history.record_download(
-            user_id=user['user_id'], provider=self.name, content_type=content_type,
-            content_id=self.extract_content_id(url), title=album_title, artist=items[0]['artist'],
-            quality=str(options.get('quality', 'Standard'))
+            user_id=user['user_id'],
+            provider=self.name,
+            content_type=content_type,
+            content_id=content_id,
+            title=album_title,
+            artist=items[0]['artist'],
+            quality=str(quality)  # Convert to string
         )
         
         return {
-            'success': True, 'type': content_type, 'items': items, 'folderpath': folder_path,
-            'title': album_title, 'artist': items[0]['artist'], 'poster_msg': user['bot_msg']
+            'success': True,
+            'type': content_type,
+            'items': items,
+            'folderpath': folder_path,
+            'title': album_title,
+            'artist': items[0]['artist'],
+            'poster_msg': user['bot_msg']
         }
     
     def build_options(self, options: dict) -> list:
         """Convert options dictionary to command-line flags"""
-        if not options: return []
+        if not options:
+            return []
+
         cmd_options = []
-        # Simplified for brevity, assuming a map exists
-        option_map = { 'aac': '--aac', 'alac-max': '--alac-max', 'atmos': '--atmos', 'song': '--song' }
+        option_map = {
+            'aac': '--aac',
+            'aac-type': '--aac-type',
+            'alac-max': '--alac-max',
+            'all-album': '--all-album',
+            'atmos': '--atmos',
+            'atmos-max': '--atmos-max',
+            'debug': '--debug',
+            'mv-audio-type': '--mv-audio-type',
+            'mv-max': '--mv-max',
+            'select': '--select',
+            'song': '--song'
+        }
+
         for key, value in options.items():
             if key in option_map:
-                cmd_options.append(option_map[key])
-                if value is not True: cmd_options.append(str(value))
+                if value is True:  # Flag option
+                    cmd_options.append(option_map[key])
+                else:  # Value option
+                    cmd_options.extend([option_map[key], str(value)])
+
         return cmd_options
 
 async def start_apple(link: str, user: dict, options: dict = None):
     """Handle Apple Music download request with options"""
-    task_id = user.get('task_id', 'unknown')
-    # This is the correct way to instantiate the reporter now.
-    reporter = ProgressReporter(label=f"Apple Music • {task_id[:5]}")
-    user['progress'] = reporter
-    # Start the periodic status updater
-    await start_status_updater(task_id, reporter, user['bot_msg'])
-
     try:
         provider = AppleMusicProvider()
         if not provider.validate_url(link):
             await edit_message(user['bot_msg'], "❌ Invalid Apple Music URL")
             return
         
-        reporter.set_stage("Preparing")
+        # Process content with options
         result = await provider.process(link, user, options)
-
-        if not result.get('success'):
-            await edit_message(user['bot_msg'], f"❌ Error: {result.get('error', 'Unknown error')}")
+        if not result['success']:
+            await edit_message(user['bot_msg'], f"❌ Error: {result['error']}")
             return
         
-        upload_map = {
-            'track': (track_upload, result['items'][0]),
-            'video': (music_video_upload, result['items'][0]),
-            'album': (album_upload, result),
-            'playlist': (playlist_upload, result)
-        }
-
-        if result['type'] in upload_map:
-            upload_func, upload_data = upload_map[result['type']]
-            if result['type'] == 'video':
-                reporter.label = f"🎬 Apple Music • {task_id[:5]}"
-            await upload_func(upload_data, user)
+        # Process and upload content based on type
+        if result['type'] == 'track':
+            await track_upload(result['items'][0], user)
+        elif result['type'] == 'video':
+            # Update label to show video emoji
+            try:
+                if user.get('progress'):
+                    user['progress'].label = f"🎬 Apple Music • ID: {user.get('task_id','?')}"
+            except Exception:
+                pass
+            await music_video_upload(result['items'][0], user)
+        elif result['type'] == 'album':
+            await album_upload(result, user)
+        elif result['type'] == 'playlist':
+            await playlist_upload(result, user)
         else:
             await edit_message(user['bot_msg'], f"❌ Unsupported content type: {result['type']}")
             return
         
-        reporter.set_stage("Done")
+        # Final cleanup
+        try:
+            await user['progress'].set_stage("Finalizing")
+        except Exception:
+            pass
+        await cleanup(user)
+        # Clean only the contents of global Apple output folders
+        cleanup_apple_global()
+        try:
+            await user['progress'].set_stage("Done")
+        except Exception:
+            await edit_message(user['bot_msg'], "✅ Apple Music download completed!")
         
     except asyncio.CancelledError:
-        if user.get('progress'):
-            user['progress'].set_stage("Cancelled")
-        await asyncio.sleep(1)
+        try:
+            await edit_message(user['bot_msg'], "⏹️ Task cancelled. Cleaning up…")
+        except Exception:
+            pass
+        await cleanup(user)
         raise
-
     except Exception as e:
         logger.error(f"Apple Music error: {str(e)}", exc_info=True)
-        if user.get('progress'):
-            user['progress'].set_stage("Error")
-        await edit_message(user['bot_msg'], f"❌ Error: {str(e)}")
-
-    finally:
-        # Crucially, stop the status updater to prevent it from running forever
-        await stop_status_updater(task_id)
-        # Final cleanup
+        try:
+            await user.get('progress', None).set_stage("Done")
+        except Exception:
+            await edit_message(user['bot_msg'], f"❌ Error: {str(e)}")
         await cleanup(user)
-        await asyncio.to_thread(cleanup_apple_global)
