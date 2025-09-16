@@ -30,7 +30,7 @@ async def track_upload(metadata, user, index: int = None, total: int = None):
     if bot_set.upload_mode == 'Telegram':
         reporter = user.get('progress')
         if reporter:
-            reporter.set_stage("Uploading")
+            await reporter.set_stage("Uploading")
         await send_message(
             user,
             metadata['filepath'],
@@ -72,13 +72,9 @@ async def track_upload(metadata, user, index: int = None, total: int = None):
         await _post_rclone_manage_button(user, remote_info)
     
     # Cleanup
-    try:
-        await asyncio.to_thread(os.remove, metadata['filepath'])
-        if metadata.get('thumbnail'):
-            await asyncio.to_thread(os.remove, metadata['thumbnail'])
-    except Exception as e:
-        LOGGER.error(f"Error during file cleanup for track {metadata.get('title')}: {e}")
-
+    os.remove(metadata['filepath'])
+    if metadata.get('thumbnail'):
+        os.remove(metadata['thumbnail'])
 
 async def music_video_upload(metadata, user):
     """
@@ -96,7 +92,7 @@ async def music_video_upload(metadata, user):
     if bot_set.upload_mode == 'Telegram':
         reporter = user.get('progress')
         if reporter:
-            reporter.set_stage("Uploading")
+            await reporter.set_stage("Uploading")
         # Decide media type based on setting
         send_type = 'doc' if getattr(bot_set, 'video_as_document', False) else 'video'
         await send_message(
@@ -135,23 +131,16 @@ async def music_video_upload(metadata, user):
         await _post_rclone_manage_button(user, remote_info)
     
     # Cleanup
-    try:
-        await asyncio.to_thread(os.remove, metadata['filepath'])
-        if metadata.get('thumbnail'):
-            await asyncio.to_thread(os.remove, metadata['thumbnail'])
-    except Exception as e:
-        LOGGER.error(f"Error during file cleanup for music video {metadata.get('title')}: {e}")
+    os.remove(metadata['filepath'])
+    if metadata.get('thumbnail'):
+        os.remove(metadata['thumbnail'])
 
-
-async def _get_folder_size(folder_path: str) -> int:
+def _get_folder_size(folder_path: str) -> int:
     total_size = 0
-    # os.walk is synchronous, but the I/O bound part is getsize.
-    # We will make each getsize call non-blocking sequentially.
     for root, _, files in os.walk(folder_path):
         for f in files:
             try:
-                file_path = os.path.join(root, f)
-                total_size += await asyncio.to_thread(os.path.getsize, file_path)
+                total_size += os.path.getsize(os.path.join(root, f))
             except Exception:
                 continue
     return total_size
@@ -176,7 +165,7 @@ async def album_upload(metadata, user):
         use_zip = bool(getattr(bot_set, 'apple_album_zip', False))
         if use_zip:
             # Decide zipping strategy based on folder size and Telegram limits
-            total_size = await _get_folder_size(metadata['folderpath'])
+            total_size = _get_folder_size(metadata['folderpath'])
             zip_paths = []
             if total_size > MAX_SIZE:
                 # Split into multiple zips for Telegram
@@ -184,8 +173,6 @@ async def album_upload(metadata, user):
                 zip_paths = z if isinstance(z, list) else [z]
             else:
                 # Single descriptive zip with progress
-                if reporter:
-                    reporter.set_stage("Zipping")
                 zip_path = await create_apple_zip(
                     metadata['folderpath'], 
                     user['user_id'],
@@ -219,9 +206,9 @@ async def album_upload(metadata, user):
                 )
                 # Clean up zip file after upload
                 try:
-                    await asyncio.to_thread(os.remove, zp)
-                except Exception as e:
-                    LOGGER.error(f"Error during zip cleanup for album {metadata.get('title')}: {e}")
+                    os.remove(zp)
+                except Exception:
+                    pass
         else:
             # Upload tracks individually
             tracks = metadata.get('tracks') or metadata.get('items', [])
@@ -249,8 +236,7 @@ async def album_upload(metadata, user):
         await _post_rclone_manage_button(user, remote_info)
     
     # Cleanup
-    await asyncio.to_thread(shutil.rmtree, metadata['folderpath'], ignore_errors=True)
-
+    shutil.rmtree(metadata['folderpath'])
 
 async def artist_upload(metadata, user):
     """
@@ -269,14 +255,12 @@ async def artist_upload(metadata, user):
         reporter = user.get('progress')
         if bot_set.artist_zip:
             # Decide zipping strategy based on size
-            total_size = await _get_folder_size(metadata['folderpath'])
+            total_size = _get_folder_size(metadata['folderpath'])
             zip_paths = []
             if total_size > MAX_SIZE:
                 z = await zip_handler(metadata['folderpath'])
                 zip_paths = z if isinstance(z, list) else [z]
             else:
-                if reporter:
-                    reporter.set_stage("Zipping")
                 zip_path = await create_apple_zip(
                     metadata['folderpath'], 
                     user['user_id'],
@@ -308,9 +292,9 @@ async def artist_upload(metadata, user):
                     total_files=total_parts
                 )
                 try:
-                    await asyncio.to_thread(os.remove, zp)
-                except Exception as e:
-                    LOGGER.error(f"Error during zip cleanup for artist {metadata.get('title')}: {e}")
+                    os.remove(zp)
+                except Exception:
+                    pass
         else:
             # Upload albums or tracks individually
             if 'albums' in metadata:
@@ -337,8 +321,7 @@ async def artist_upload(metadata, user):
         await _post_rclone_manage_button(user, remote_info)
     
     # Cleanup
-    await asyncio.to_thread(shutil.rmtree, metadata['folderpath'], ignore_errors=True)
-
+    shutil.rmtree(metadata['folderpath'])
 
 async def playlist_upload(metadata, user):
     """
@@ -359,15 +342,13 @@ async def playlist_upload(metadata, user):
         use_zip = bool(getattr(bot_set, 'apple_playlist_zip', False))
         if use_zip:
             # Decide zipping strategy based on size
-            total_size = await _get_folder_size(metadata['folderpath'])
+            total_size = _get_folder_size(metadata['folderpath'])
             zip_paths = []
             if total_size > MAX_SIZE:
                 z = await zip_handler(metadata['folderpath'])
                 zip_paths = z if isinstance(z, list) else [z]
             else:
                 # Create descriptive zip file
-                if reporter:
-                    reporter.set_stage("Zipping")
                 zip_path = await create_apple_zip(
                     metadata['folderpath'], 
                     user['user_id'],
@@ -400,9 +381,9 @@ async def playlist_upload(metadata, user):
                     total_files=total_parts
                 )
                 try:
-                    await asyncio.to_thread(os.remove, zp)
-                except Exception as e:
-                    LOGGER.error(f"Error during zip cleanup for playlist {metadata.get('title')}: {e}")
+                    os.remove(zp)
+                except Exception:
+                    pass
         else:
             # Upload tracks individually
             tracks = metadata.get('tracks') or metadata.get('items', [])
@@ -426,8 +407,7 @@ async def playlist_upload(metadata, user):
         await _post_rclone_manage_button(user, remote_info)
     
     # Cleanup
-    await asyncio.to_thread(shutil.rmtree, metadata['folderpath'], ignore_errors=True)
-
+    shutil.rmtree(metadata['folderpath'])
 
 async def rclone_upload(user, path, base_path):
     """
@@ -442,9 +422,8 @@ async def rclone_upload(user, path, base_path):
     if not dest_root:
         return None, None, None
 
-    # This function uses subprocesses, which are already non-blocking.
-    # However, some os calls can still block.
-    abs_path = await asyncio.to_thread(os.path.abspath, path)
+    # Normalize source path
+    abs_path = os.path.abspath(path)
 
     # Compute relative path under a sensible root so remote path matches layout
     def _compute_relative(p: str, base: str | None) -> str:
@@ -471,7 +450,7 @@ async def rclone_upload(user, path, base_path):
 
     # Decide scope: FILE (existing) vs FOLDER (full folder tree)
     scope = getattr(bot_set, 'rclone_copy_scope', 'FILE').upper()
-    is_directory = await asyncio.to_thread(os.path.isdir, abs_path)
+    is_directory = os.path.isdir(abs_path)
 
     if scope == 'FOLDER':
         # Resolve the root folder we should copy
@@ -567,7 +546,6 @@ async def rclone_upload(user, path, base_path):
     }
 
     return rclone_link, index_link, remote_info
-
 
 async def _post_rclone_manage_button(user, remote_info: dict):
     try:
