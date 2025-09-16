@@ -73,8 +73,8 @@ class AppleMusicProvider:
             return {'success': False, 'error': "Metadata extraction failed"}
         
         if reporter:
-            reporter.set_total_tracks(len(items))
-            reporter.update_download(tracks_done=len(items))
+            await reporter.set_total_tracks(len(items))
+            await reporter.update_download(tracks_done=len(items))
         
         has_video = any(f.endswith(('.mp4', '.m4v', '.mov')) for f in files)
         has_audio = any(f.endswith(('.m4a', '.flac', '.alac')) for f in files)
@@ -136,7 +136,7 @@ async def start_apple(link: str, user: dict, options: dict = None):
             await edit_message(user['bot_msg'], "❌ Invalid Apple Music URL")
             return
         
-        reporter.set_stage("Preparing")
+        await reporter.set_stage("Preparing")
         result = await provider.process(link, user, options)
 
         if not result.get('success'):
@@ -159,7 +159,7 @@ async def start_apple(link: str, user: dict, options: dict = None):
             await edit_message(user['bot_msg'], f"❌ Unsupported content type: {result['type']}")
             return
         
-        reporter.set_stage("Done")
+        await reporter.set_stage("Done")
         
     except asyncio.CancelledError:
         if user.get('progress'):
