@@ -17,13 +17,8 @@ async def update_status_message(task_id: str, reporter, message):
         return
 
     try:
-        text = await reporter.render()
-        # Only edit the message if the text has actually changed.
-        if message.text != text:
-            await edit_message(message, text)
-            # This is a bit of a hack to update the in-memory message object
-            # so we can check against it next time.
-            message.text = text
+        # Force the reporter to update its message
+        await reporter._maybe_update(force=True)
     except Exception as e:
         from bot.logger import LOGGER
         LOGGER.error(f"Error updating status for task {task_id}: {e}")
