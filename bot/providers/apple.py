@@ -3,7 +3,6 @@ import re
 import asyncio
 import logging
 import shutil
-
 from bot.helpers.utils import (
     run_apple_downloader,
     extract_apple_metadata,
@@ -26,15 +25,21 @@ logger = logging.getLogger(__name__)
 class AppleMusicProvider:
     def __init__(self):
         self.name = "apple"
-    
+
     def validate_url(self, url: str) -> bool:
-        return bool(re.match(r"https://music\.apple\.com/.+/(album|song|playlist|music-video)/.+", url))
-    
+        """Check if URL is valid Apple Music content"""
+        return bool(re.match(
+            r"https://music\.apple\.com/.+/(album|song|playlist|music-video)/.+",
+            url
+        ))
+
     def extract_content_id(self, url: str) -> str:
+        """Extract Apple Music content ID from URL"""
         match = re.search(r'/(album|song|playlist|music-video|artist)/[^/]+/(\d+)', url)
         return match.group(2) if match else "unknown"
-    
+
     async def process(self, url: str, user: dict, options: dict = None) -> dict:
+        """Process Apple Music URL with options"""
         user_dir = os.path.join(Config.LOCAL_STORAGE, str(user['user_id']), "Apple Music")
         await asyncio.to_thread(os.makedirs, user_dir, exist_ok=True)
         LOGGER.info(f"Created temporary working directory for Apple Music task: {user_dir}")
@@ -94,6 +99,7 @@ class AppleMusicProvider:
         }
     
     def build_options(self, options: dict) -> list:
+        """Convert options dictionary to command-line flags"""
         if not options: return []
         cmd_options = []
         # Simplified for brevity, assuming a map exists
@@ -105,9 +111,12 @@ class AppleMusicProvider:
         return cmd_options
 
 async def start_apple(link: str, user: dict, options: dict = None):
+    """Handle Apple Music download request with options"""
     task_id = user.get('task_id', 'unknown')
+    # This is the correct way to instantiate the reporter now.
     reporter = ProgressReporter(label=f"Apple Music • {task_id[:5]}")
     user['progress'] = reporter
+    # Start the periodic status updater
     await start_status_updater(task_id, reporter, user['bot_msg'])
 
     try:
@@ -154,6 +163,8 @@ async def start_apple(link: str, user: dict, options: dict = None):
         await edit_message(user['bot_msg'], f"❌ Error: {str(e)}")
 
     finally:
+        # Crucially, stop the status updater to prevent it from running forever
         await stop_status_updater(task_id)
+        # Final cleanup
         await cleanup(user)
         await asyncio.to_thread(cleanup_apple_global)
