@@ -1,6 +1,7 @@
 import os
 import asyncio
 import re
+import time
 
 from pyrogram.types import Message
 from pyrogram.errors import MessageNotModified, FloodWait
@@ -111,6 +112,7 @@ async def send_message(user, item, itype='text', caption=None, markup=None, chat
         except Exception:
             pass
 
+    msg = None
     try:
         if itype == 'text':
             msg = await aio.send_message(

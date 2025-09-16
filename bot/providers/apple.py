@@ -2,6 +2,7 @@ import os
 import re
 import asyncio
 import logging
+import shutil
 
 from bot.helpers.utils import (
     run_apple_downloader,
