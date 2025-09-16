@@ -30,7 +30,7 @@ async def track_upload(metadata, user, index: int = None, total: int = None):
     if bot_set.upload_mode == 'Telegram':
         reporter = user.get('progress')
         if reporter:
-            await reporter.set_stage("Uploading")
+            reporter.set_stage("Uploading")
         await send_message(
             user,
             metadata['filepath'],
@@ -79,6 +79,7 @@ async def track_upload(metadata, user, index: int = None, total: int = None):
     except Exception as e:
         LOGGER.error(f"Error during file cleanup for track {metadata.get('title')}: {e}")
 
+
 async def music_video_upload(metadata, user):
     """
     Upload a music video
@@ -95,7 +96,7 @@ async def music_video_upload(metadata, user):
     if bot_set.upload_mode == 'Telegram':
         reporter = user.get('progress')
         if reporter:
-            await reporter.set_stage("Uploading")
+            reporter.set_stage("Uploading")
         # Decide media type based on setting
         send_type = 'doc' if getattr(bot_set, 'video_as_document', False) else 'video'
         await send_message(
@@ -141,12 +142,11 @@ async def music_video_upload(metadata, user):
     except Exception as e:
         LOGGER.error(f"Error during file cleanup for music video {metadata.get('title')}: {e}")
 
+
 async def _get_folder_size(folder_path: str) -> int:
     total_size = 0
     # os.walk is synchronous, but the I/O bound part is getsize.
-    # We can collect all file paths first and then get sizes concurrently.
-    # However, for simplicity and to avoid holding many paths in memory,
-    # we will make each getsize call non-blocking sequentially.
+    # We will make each getsize call non-blocking sequentially.
     for root, _, files in os.walk(folder_path):
         for f in files:
             try:
@@ -184,6 +184,8 @@ async def album_upload(metadata, user):
                 zip_paths = z if isinstance(z, list) else [z]
             else:
                 # Single descriptive zip with progress
+                if reporter:
+                    reporter.set_stage("Zipping")
                 zip_path = await create_apple_zip(
                     metadata['folderpath'], 
                     user['user_id'],
@@ -247,7 +249,8 @@ async def album_upload(metadata, user):
         await _post_rclone_manage_button(user, remote_info)
     
     # Cleanup
-    shutil.rmtree(metadata['folderpath'])
+    await asyncio.to_thread(shutil.rmtree, metadata['folderpath'], ignore_errors=True)
+
 
 async def artist_upload(metadata, user):
     """
@@ -272,6 +275,8 @@ async def artist_upload(metadata, user):
                 z = await zip_handler(metadata['folderpath'])
                 zip_paths = z if isinstance(z, list) else [z]
             else:
+                if reporter:
+                    reporter.set_stage("Zipping")
                 zip_path = await create_apple_zip(
                     metadata['folderpath'], 
                     user['user_id'],
@@ -332,7 +337,8 @@ async def artist_upload(metadata, user):
         await _post_rclone_manage_button(user, remote_info)
     
     # Cleanup
-    shutil.rmtree(metadata['folderpath'])
+    await asyncio.to_thread(shutil.rmtree, metadata['folderpath'], ignore_errors=True)
+
 
 async def playlist_upload(metadata, user):
     """
@@ -360,6 +366,8 @@ async def playlist_upload(metadata, user):
                 zip_paths = z if isinstance(z, list) else [z]
             else:
                 # Create descriptive zip file
+                if reporter:
+                    reporter.set_stage("Zipping")
                 zip_path = await create_apple_zip(
                     metadata['folderpath'], 
                     user['user_id'],
@@ -418,7 +426,8 @@ async def playlist_upload(metadata, user):
         await _post_rclone_manage_button(user, remote_info)
     
     # Cleanup
-    shutil.rmtree(metadata['folderpath'])
+    await asyncio.to_thread(shutil.rmtree, metadata['folderpath'], ignore_errors=True)
+
 
 async def rclone_upload(user, path, base_path):
     """
@@ -433,8 +442,9 @@ async def rclone_upload(user, path, base_path):
     if not dest_root:
         return None, None, None
 
-    # Normalize source path
-    abs_path = os.path.abspath(path)
+    # This function uses subprocesses, which are already non-blocking.
+    # However, some os calls can still block.
+    abs_path = await asyncio.to_thread(os.path.abspath, path)
 
     # Compute relative path under a sensible root so remote path matches layout
     def _compute_relative(p: str, base: str | None) -> str:
@@ -461,7 +471,7 @@ async def rclone_upload(user, path, base_path):
 
     # Decide scope: FILE (existing) vs FOLDER (full folder tree)
     scope = getattr(bot_set, 'rclone_copy_scope', 'FILE').upper()
-    is_directory = os.path.isdir(abs_path)
+    is_directory = await asyncio.to_thread(os.path.isdir, abs_path)
 
     if scope == 'FOLDER':
         # Resolve the root folder we should copy
@@ -557,6 +567,7 @@ async def rclone_upload(user, path, base_path):
     }
 
     return rclone_link, index_link, remote_info
+
 
 async def _post_rclone_manage_button(user, remote_info: dict):
     try:
