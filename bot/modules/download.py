@@ -13,7 +13,6 @@ from ..helpers.tidal.handler import start_tidal
 from ..helpers.tidal_ng.handler import start_tidal_ng
 from ..helpers.deezer.handler import start_deezer
 from ..providers.apple import start_apple
-# IMPORT EDIT_MESSAGE HERE:
 from ..helpers.message import send_message, antiSpam, check_user, fetch_user_details, edit_message
 from ..helpers.state import conversation_state
 from ..helpers.progress import ProgressReporter
@@ -25,16 +24,13 @@ async def download_track(c, msg: Message):
     if await check_user(msg=msg):
         try:
             if msg.reply_to_message:
-                # Get options from message text and URL from reply
                 parts = msg.text.split()
                 options = parse_options(parts[1:]) if len(parts) > 1 else {}
                 link = msg.reply_to_message.text
                 reply = True
             else:
-                # Parse options and URL from message text
                 parts = msg.text.split()[1:]
                 options = parse_options(parts)
-                # Last part is URL
                 link = parts[-1] if parts else None
                 reply = False
         except Exception as e:
@@ -43,8 +39,9 @@ async def download_track(c, msg: Message):
 
         if not link:
             return await send_message(msg, lang.s.ERR_LINK_RECOGNITION)
-        
+
         # Apple-only: optional flags popup before starting, unless flags already provided
+        
         try:
             apple_music = ["https://music.apple.com"]
             from bot.settings import bot_set
@@ -57,16 +54,11 @@ async def download_track(c, msg: Message):
             is_apple_link = False
 
         if is_apple_link and popup_on and not has_flags:
-            # Store minimal context and show selection UI, then exit handler.
             user_ctx = await fetch_user_details(msg, reply)
             await conversation_state.start(
                 msg.from_user.id,
                 'apple_flags_select',
-                {
-                    'link': link,
-                    'options': options or {},
-                    'reply': bool(reply)
-                }
+                {'link': link, 'options': options or {}, 'reply': bool(reply)}
             )
             kb = InlineKeyboardMarkup([
                 [InlineKeyboardButton("Album Download (ALAC)", callback_data="appleFlag|album_alac")],
@@ -86,71 +78,55 @@ async def download_track(c, msg: Message):
             from bot.settings import bot_set
             # If queue mode is ON, enqueue the job to run one-by-one
             if getattr(bot_set, 'queue_mode', False):
-                # Build a small function that will create its own task state when executed
                 async def _job():
                     state = await task_manager.create(user, label="Download")
                     u = dict(user)
                     u['task_id'] = state.task_id
                     u['cancel_event'] = state.cancel_event
                     u['bot_msg'] = await send_message(msg, f"Queued task {state.task_id[:5]} is starting...")
-
-                    # Create a reporter and start the periodic updater
                     reporter = ProgressReporter(label=f"DL • {state.task_id[:5]}")
                     u['progress'] = reporter
                     await start_status_updater(u['task_id'], reporter, u['bot_msg'])
-
                     try:
                         await start_link(link, u, options)
                     except asyncio.CancelledError:
                         await edit_message(u['bot_msg'], "⏹️ Task cancelled")
                     except Exception as e:
                         LOGGER.error(f"Download failed: {e}", exc_info=True)
-                        error_msg = f"Download failed: {str(e)}"
-                        await edit_message(u['bot_msg'], error_msg)
+                        await edit_message(u['bot_msg'], f"Download failed: {str(e)}")
                     finally:
-                        # Crucially, stop the status updater to prevent it from running forever
                         await stop_status_updater(u['task_id'])
                         await cleanup(u)
                         await task_manager.finish(state.task_id, status="cancelled" if state.cancel_event.is_set() else "done")
                         await antiSpam(msg.from_user.id, msg.chat.id, True)
-                        # Keep the final status message for a bit before deleting
                         await asyncio.sleep(10)
                         try:
                             await c.delete_messages(msg.chat.id, u['bot_msg'].id)
                         except Exception:
                             pass
-
                 qid, pos = await task_manager.enqueue(user['user_id'], link, options, _job)
                 await send_message(user, f"✅ Added to queue. ID: <code>{qid}</code>\nPosition: {pos}")
                 return
 
-            # Otherwise, run immediately as before
             state = await task_manager.create(user, label="Download")
             user['task_id'] = state.task_id
             user['cancel_event'] = state.cancel_event
             user['bot_msg'] = await send_message(msg, "Preparing...")
-
-            # Create a reporter and start the periodic updater
             reporter = ProgressReporter(label=f"DL • {state.task_id[:5]}")
             user['progress'] = reporter
             await start_status_updater(user['task_id'], reporter, user['bot_msg'])
-
             try:
                 await start_link(link, user, options)
-                # Final message is sent by the uploader now, so no need for one here
             except asyncio.CancelledError:
                 await edit_message(user['bot_msg'], "⏹️ Task cancelled")
             except Exception as e:
                 LOGGER.error(f"Download failed: {e}", exc_info=True)
-                error_msg = f"Download failed: {str(e)}"
-                await edit_message(user['bot_msg'], error_msg)
+                await edit_message(user['bot_msg'], f"Download failed: {str(e)}")
             finally:
-                # Crucially, stop the status updater to prevent it from running forever
                 await stop_status_updater(user['task_id'])
-                await cleanup(user)  # deletes uploaded files
+                await cleanup(user)
                 await task_manager.finish(state.task_id, status="cancelled" if state.cancel_event.is_set() else "done")
                 await antiSpam(msg.from_user.id, msg.chat.id, True)
-                # Keep the final status message for a bit before deleting
                 await asyncio.sleep(10)
                 try:
                     await c.delete_messages(msg.chat.id, user['bot_msg'].id)
@@ -173,10 +149,9 @@ def parse_options(parts: list) -> dict:
         part = parts[i]
         if part.startswith('--'):
             key = part[2:]
-            # Check if next part is a value (not another option)
             if i + 1 < len(parts) and not parts[i+1].startswith('--'):
                 options[key] = parts[i+1]
-                i += 1  # Skip value
+                i += 1
             else:
                 options[key] = True
         i += 1
@@ -213,53 +188,37 @@ async def start_link(link: str, user: dict, options: dict = None):
         return 'spotify'
     elif link.startswith(tuple(apple_music)):
         user['provider'] = 'Apple'
-        # USE IMPORTED EDIT_MESSAGE FUNCTION
-        await edit_message(user['bot_msg'], "Starting Apple Music download...")
         await start_apple(link, user, options)
     else:
         await send_message(user, lang.s.ERR_UNSUPPORTED_LINK)
         return None
 
 
-# --- Apple flags popup callbacks ---
 @Client.on_callback_query(filters.regex(pattern=r"^appleFlag\|"))
 async def apple_flag_select_cb(c, cb):
     try:
-        state = await conversation_state.get(cb.from_user.id) or {}
-        if state.get('stage') != 'apple_flags_select':
+        state_data = await conversation_state.get(cb.from_user.id) or {}
+        if state_data.get('stage') != 'apple_flags_select':
             return
-        data = state.get('data') or {}
+
+        data = state_data.get('data') or {}
         link = data.get('link')
         options = dict(data.get('options') or {})
         choice = (cb.data.split('|', 1)[1] or '').strip()
-        if choice == 'album_alac':
-            pass
-        elif choice == 'song':
-            options['song'] = True
-        elif choice == 'atmos':
-            options['atmos'] = True
-        elif choice == 'song_atmos':
-            options['song'] = True
-            options['atmos'] = True
-        else:
-            return
-        # Acknowledge and close the selection message
-        try:
-            await c.answer_callback_query(cb.id)
-        except Exception:
-            pass
-        try:
-            await c.delete_messages(cb.message.chat.id, cb.message.id)
-        except Exception:
-            pass
-        # Clear state
+
+        if choice == 'album_alac': pass
+        elif choice == 'song': options['song'] = True
+        elif choice == 'atmos': options['atmos'] = True
+        elif choice == 'song_atmos': options.update({'song': True, 'atmos': True})
+        else: return
+
+        await c.answer_callback_query(cb.id)
+        await c.delete_messages(cb.message.chat.id, cb.message.id)
         await conversation_state.clear(cb.from_user.id)
 
-        # Anti-spam check
         if await antiSpam(cb.from_user.id, cb.message.chat.id):
             return
 
-        # Build user context
         user = await fetch_user_details(cb.message, reply=False)
         user['link'] = link
 
@@ -272,12 +231,9 @@ async def apple_flag_select_cb(c, cb):
                 u['task_id'] = state.task_id
                 u['cancel_event'] = state.cancel_event
                 u['bot_msg'] = await send_message(cb.message, f"Queued task {state.task_id[:5]} is starting...")
-
-                # Create a reporter and start the periodic updater
                 reporter = ProgressReporter(label=f"DL • {state.task_id[:5]}")
                 u['progress'] = reporter
                 await start_status_updater(u['task_id'], reporter, u['bot_msg'])
-
                 try:
                     await start_link(link, u, options)
                 except asyncio.CancelledError:
@@ -295,22 +251,17 @@ async def apple_flag_select_cb(c, cb):
                         await c.delete_messages(cb.message.chat.id, u['bot_msg'].id)
                     except Exception:
                         pass
-
             qid, pos = await task_manager.enqueue(user['user_id'], link, options, _job)
             await send_message(cb.message, f"✅ Added to queue. ID: <code>{qid}</code>\nPosition: {pos}")
             return
 
-        # Immediate run
         state = await task_manager.create(user, label="Download")
         user['task_id'] = state.task_id
         user['cancel_event'] = state.cancel_event
         user['bot_msg'] = await send_message(cb.message, "Preparing...")
-
-        # Create a reporter and start the periodic updater
         reporter = ProgressReporter(label=f"DL • {state.task_id[:5]}")
         user['progress'] = reporter
         await start_status_updater(user['task_id'], reporter, user['bot_msg'])
-
         try:
             await start_link(link, user, options)
         except asyncio.CancelledError:
@@ -328,7 +279,8 @@ async def apple_flag_select_cb(c, cb):
                 await c.delete_messages(cb.message.chat.id, user['bot_msg'].id)
             except Exception:
                 pass
-    except Exception:
+    except Exception as e:
+        LOGGER.error(f"Error in apple_flag_select_cb: {e}", exc_info=True)
         try:
             await conversation_state.clear(cb.from_user.id)
         except Exception:
