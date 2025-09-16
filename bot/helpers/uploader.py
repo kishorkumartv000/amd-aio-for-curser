@@ -135,12 +135,13 @@ async def music_video_upload(metadata, user):
     if metadata.get('thumbnail'):
         os.remove(metadata['thumbnail'])
 
-def _get_folder_size(folder_path: str) -> int:
+async def _get_folder_size(folder_path: str) -> int:
     total_size = 0
     for root, _, files in os.walk(folder_path):
         for f in files:
             try:
-                total_size += os.path.getsize(os.path.join(root, f))
+                file_path = os.path.join(root, f)
+                total_size += await asyncio.to_thread(os.path.getsize, file_path)
             except Exception:
                 continue
     return total_size
@@ -165,7 +166,7 @@ async def album_upload(metadata, user):
         use_zip = bool(getattr(bot_set, 'apple_album_zip', False))
         if use_zip:
             # Decide zipping strategy based on folder size and Telegram limits
-            total_size = _get_folder_size(metadata['folderpath'])
+            total_size = await _get_folder_size(metadata['folderpath'])
             zip_paths = []
             if total_size > MAX_SIZE:
                 # Split into multiple zips for Telegram
@@ -255,7 +256,7 @@ async def artist_upload(metadata, user):
         reporter = user.get('progress')
         if bot_set.artist_zip:
             # Decide zipping strategy based on size
-            total_size = _get_folder_size(metadata['folderpath'])
+            total_size = await _get_folder_size(metadata['folderpath'])
             zip_paths = []
             if total_size > MAX_SIZE:
                 z = await zip_handler(metadata['folderpath'])
@@ -342,7 +343,7 @@ async def playlist_upload(metadata, user):
         use_zip = bool(getattr(bot_set, 'apple_playlist_zip', False))
         if use_zip:
             # Decide zipping strategy based on size
-            total_size = _get_folder_size(metadata['folderpath'])
+            total_size = await _get_folder_size(metadata['folderpath'])
             zip_paths = []
             if total_size > MAX_SIZE:
                 z = await zip_handler(metadata['folderpath'])
