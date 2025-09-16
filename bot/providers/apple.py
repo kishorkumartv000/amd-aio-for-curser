@@ -125,7 +125,7 @@ async def start_apple(link: str, user: dict, options: dict = None):
     """Handle Apple Music download request with options"""
     task_id = user.get('task_id', 'unknown')
     # This is the correct way to instantiate the reporter now.
-    reporter = ProgressReporter(label=f"Apple Music • {task_id[:5]}")
+    reporter = ProgressReporter(user['bot_msg'], label=f"Apple Music • {task_id[:5]}")
     user['progress'] = reporter
     # Start the periodic status updater
     await start_status_updater(task_id, reporter, user['bot_msg'])
