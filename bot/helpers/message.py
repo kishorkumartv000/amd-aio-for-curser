@@ -112,6 +112,7 @@ async def send_message(user, item, itype='text', caption=None, markup=None, chat
         except Exception:
             pass
 
+    msg = None
     try:
         if itype == 'text':
             msg = await aio.send_message(
