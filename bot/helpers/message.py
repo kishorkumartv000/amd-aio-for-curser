@@ -1,7 +1,6 @@
 import os
 import asyncio
 import re
-import time
 
 from pyrogram.types import Message
 from pyrogram.errors import MessageNotModified, FloodWait
@@ -85,30 +84,32 @@ async def send_message(user, item, itype='text', caption=None, markup=None, chat
         user = await fetch_user_details(user)
     chat_id = chat_id if chat_id else user['chat_id']
     
-    # This is the simplified progress callback. It no longer needs access to the event
-    # loop or any throttling logic, as it only updates the state of the reporter object.
-    def _progress_callback(current, total):
-        if cancel_event and cancel_event.is_set():
-            raise RuntimeError("Upload cancelled by user.")
+    # Initialize msg to prevent UnboundLocalError
+    msg = None
 
-        if progress_reporter:
-            progress_reporter.update_upload(
-                current,
-                total,
-                file_index=file_index,
-                file_total=total_files,
-                label=progress_label or 'Uploading'
-            )
+    # Progress callback wrapper for uploads
+    def _make_progress_cb(label=None, index=None, total=None):
+        def _cb(current, total_bytes):
+            if cancel_event and cancel_event.is_set():
+                raise RuntimeError("Cancelled")
+            if progress_reporter:
+                try:
+                    loop = asyncio.get_event_loop()
+                    loop.create_task(progress_reporter.update_upload(current, total_bytes, file_index=index, file_total=total, label=label or 'Uploading'))
+                except Exception:
+                    pass
+        return _cb
 
-    # Pre-stage update so users see "Uploading" immediately
+    # Pre-stage update so users see "Uploading" immediately, and initialize totals
     if progress_reporter and itype in ('doc', 'audio', 'video'):
         try:
-            progress_reporter.set_stage(progress_label or 'Uploading')
-            # Run blocking file operations in a thread
-            if isinstance(item, str) and await asyncio.to_thread(os.path.exists, item):
-                total_bytes = await asyncio.to_thread(os.path.getsize, item)
-                # Initial update to set total size
-                progress_reporter.update_upload(0, total_bytes, file_index=file_index, file_total=total_files, label=progress_label or 'Uploading')
+            await progress_reporter.set_stage(progress_label or 'Uploading')
+            if isinstance(item, str) and os.path.exists(item):
+                try:
+                    total_bytes = os.path.getsize(item)
+                    await progress_reporter.update_upload(0, total_bytes, file_index=file_index, file_total=total_files, label=progress_label or 'Uploading')
+                except Exception:
+                    pass
         except Exception:
             pass
 
@@ -128,9 +129,10 @@ async def send_message(user, item, itype='text', caption=None, markup=None, chat
                 document=item,
                 caption=caption,
                 reply_to_message_id=user['r_id'],
-                progress=_progress_callback if progress_reporter else None
+                progress=_make_progress_cb(progress_label, file_index, total_files) if progress_reporter else None
             )
         elif itype == 'audio':
+            # SAFE METADATA ACCESS WITH DEFAULTS
             duration = int(meta.get('duration', 0)) if meta else 0
             artist = meta.get('artist', 'Unknown Artist') if meta else 'Unknown Artist'
             title = meta.get('title', 'Unknown Track') if meta else 'Unknown Track'
@@ -145,9 +147,10 @@ async def send_message(user, item, itype='text', caption=None, markup=None, chat
                 title=title,
                 thumb=thumbnail,
                 reply_to_message_id=user['r_id'],
-                progress=_progress_callback if progress_reporter else None
+                progress=_make_progress_cb(progress_label, file_index, total_files) if progress_reporter else None
             )
-        elif itype == 'video':
+        elif itype == 'video':  # Added video type support
+            # SAFE METADATA ACCESS WITH DEFAULTS
             duration = int(meta.get('duration', 0)) if meta else 0
             width = int(meta.get('width', 1920)) if meta else 1920
             height = int(meta.get('height', 1080)) if meta else 1080
@@ -162,7 +165,7 @@ async def send_message(user, item, itype='text', caption=None, markup=None, chat
                 height=height,
                 thumb=thumbnail,
                 reply_to_message_id=user['r_id'],
-                progress=_progress_callback if progress_reporter else None
+                progress=_make_progress_cb(progress_label, file_index, total_files) if progress_reporter else None
             )
         elif itype == 'pic':
             msg = await aio.send_photo(

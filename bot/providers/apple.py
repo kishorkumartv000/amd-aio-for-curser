@@ -49,9 +49,9 @@ class AppleMusicProvider:
         # Initialize progress reporter
         from bot.helpers.progress import ProgressReporter
         label = f"Apple Music • ID: {user.get('task_id','?')}"
-        reporter = ProgressReporter(user['bot_msg'], label=label)
+        reporter = ProgressReporter(label=label)
         user['progress'] = reporter
-        await reporter.set_stage("Preparing")
+        reporter.set_stage("Preparing")
         
         # Download content
         result = await run_apple_downloader(
