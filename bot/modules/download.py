@@ -94,7 +94,7 @@ async def download_track(c, msg: Message):
 
                     from ..helpers.progress import ProgressReporter
                     from ..helpers.status import start_status_updater, stop_status_updater
-                    reporter = ProgressReporter(label=f"DL • {state.task_id[:5]}")
+                    reporter = ProgressReporter(u['bot_msg'], label=f"DL • {state.task_id[:5]}")
                     u['progress'] = reporter
                     await start_status_updater(u['task_id'], reporter, u['bot_msg'])
 
@@ -258,7 +258,7 @@ async def apple_flag_select_cb(c, cb):
 
                 from ..helpers.progress import ProgressReporter
                 from ..helpers.status import start_status_updater, stop_status_updater
-                reporter = ProgressReporter(label=f"DL • {state.task_id[:5]}")
+                reporter = ProgressReporter(u['bot_msg'], label=f"DL • {state.task_id[:5]}")
                 u['progress'] = reporter
                 await start_status_updater(u['task_id'], reporter, u['bot_msg'])
 
